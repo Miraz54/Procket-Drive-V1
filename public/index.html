@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket Drive - Secure Cloud Storage</title>
+    <meta name="description" content="Pocket Drive — Your personal, secure cloud storage. Upload, manage and access your files from anywhere.">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="icon" href="/favico.png" type="image/png">
+    <meta name="google-site-verification" content="lzsKu9MgFnmpEf79SJVPmbAwDYqxwW0n6pbY54baJtw" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    
+    <!-- Initial App Loading Spinner Overlay -->
+    <div id="appInitSpinner" class="app-init-spinner">
+        <i class="fas fa-circle-notch fa-spin fa-3x"></i>
+        <h2 style="font-weight:600;font-size:1.35rem;margin:0 0 6px;">Pocket Drive</h2>
+        <p style="color:var(--text-2);font-size:0.88rem;margin:0;">Initializing secure session...</p>
+    </div>
+
+    <!-- Background particles (auth page) -->
+    <div class="bg-animation"><div class="gradient-bg"></div></div>
+
+    <!-- Toast notification -->
+    <div id="toast-container"></div>
+    <div id="toast" class="toast"></div>
+
+    <!-- Theme Toggle -->
+    <div class="theme-toggle-wrapper">
+        <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+            <span class="toggle-icon" id="themeIcon">🌙</span>
+            <span id="themeLabel">Dark</span>
+        </button>
+    </div>
+
+    <!-- ======================================================
+         AUTH PAGE — Split Screen
+    ======================================================= -->
+    <div id="authPage" class="auth-page">
+
+        <!-- LEFT: Form panel -->
+        <div class="auth-left">
+            <div class="auth-brand">
+                <div class="auth-brand-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                <span class="auth-brand-name">Pocket Drive</span>
+            </div>
+
+            <div class="auth-form-wrap">
+                <div class="auth-heading" id="authHeading">
+                    <h1 class="auth-title">Welcome back 👋</h1>
+                    <p class="auth-subtitle">Sign in to access your personal cloud storage</p>
+                </div>
+
+                <div class="auth-tabs">
+                    <button class="tab-btn active" id="tabLogin" onclick="showAuthTab('login')">Sign In</button>
+                    <button class="tab-btn" id="tabSignup" onclick="showAuthTab('signup')">Create Account</button>
+                </div>
+
+                <!-- Login -->
+                <div id="loginForm" class="auth-form active">
+                    <form onsubmit="login(event)">
+                        <div class="field-label">Email address</div>
+                        <div class="input-group">
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="loginEmail" placeholder="you@example.com" required autocomplete="email">
+                        </div>
+                        <div class="field-label">Password</div>
+                        <div class="input-group">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
+                            <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('loginPassword', this)"></i>
+                        </div>
+                        <div class="auth-row">
+                            <label class="auth-remember"><input type="checkbox" id="rememberMe"> Remember me</label>
+                            <a href="#" class="auth-forgot" onclick="openForgotPassword()">Forgot Password?</a>
+                        </div>
+                        <button type="submit" class="btn-primary"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+                    </form>
+                </div>
+
+                <!-- Sign Up -->
+                <div id="signupForm" class="auth-form">
+                    <form onsubmit="signup(event)">
+                        <div class="field-label">Email address</div>
+                        <div class="input-group">
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="signupEmail" placeholder="you@example.com" required autocomplete="email">
+                        </div>
+                        <div class="field-label">Password</div>
+                        <div class="input-group">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="signupPassword" placeholder="Min 6 characters" required autocomplete="new-password">
+                            <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('signupPassword', this)"></i>
+                        </div>
+                        <div class="field-label">Confirm Password</div>
+                        <div class="input-group">
+                            <i class="fas fa-shield-alt"></i>
+                            <input type="password" id="signupConfirmPassword" placeholder="Re-enter password" required autocomplete="new-password">
+                            <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('signupConfirmPassword', this)"></i>
+                        </div>
+                        <div id="passwordMatchMsg" class="password-match-msg"></div>
+                        <button type="submit" class="btn-primary"><i class="fas fa-user-plus"></i> Create Account</button>
+                    </form>
+                </div>
+
+                <div id="authMessage" class="message"></div>
+            </div>
+
+            <p class="auth-footer-note">&copy; 2026 Pocket Drive &bull; Md. Mirazul Alam &bull; Ruma Ahmed Ety &bull; All rights reserved</p>
+        </div>
+
+        <!-- RIGHT: Hero panel -->
+        <div class="auth-right">
+            <div class="hero-overlay-content">
+                <div class="hero-tag"><i class="fas fa-cloud"></i> Cloud Storage Platform</div>
+                <h2 class="hero-headline">Your files,<br>everywhere<br>you go.</h2>
+                <p class="hero-desc">Store, share and access all your documents, photos and videos — from any device, anytime.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================
+         DASHBOARD APP — Full Screen with Sidebar
+    ======================================================= -->
+    <div id="appPage" class="app-page" style="display:none;">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Brand -->
+            <div class="sidebar-brand">
+                <div class="sidebar-brand-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                <span class="sidebar-brand-name">Pocket Drive</span>
+            </div>
+
+            <!-- Upload button -->
+            <button class="sidebar-upload-btn" onclick="document.getElementById('fileInput').click()">
+                <i class="fas fa-plus"></i> New Upload
+            </button>
+            <button class="sidebar-upload-btn sidebar-folder-btn" onclick="openCreateFolderModal()" style="margin-top:8px; background: linear-gradient(135deg,#f59e0b,#d97706);">
+                <i class="fas fa-folder-plus"></i> New Folder
+            </button>
+            <input type="file" id="fileInput" style="display:none" onchange="uploadFile(this)">
+
+            <!-- Nav -->
+            <nav class="sidebar-nav">
+                <a class="sidebar-nav-item active" id="navMyDrive" onclick="switchView('drive')">
+                    <i class="fas fa-home"></i> My Drive
+                </a>
+                <a class="sidebar-nav-item" id="navSharedWithMe" onclick="switchView('shared')">
+                    <i class="fas fa-user-friends"></i> Shared with me
+                </a>
+                <a class="sidebar-nav-item" id="navTrash" onclick="(function(){const s=document.getElementById('sidebar');if(s&&window.innerWidth<=900&&s.classList.contains('open')){s.classList.remove('open');const o=document.getElementById('sidebarOverlay');if(o)o.style.display='none';}showTrashView();})()">
+                    <i class="fas fa-trash-alt"></i> Trash
+                </a>
+            </nav>
+
+            <!-- Storage widget -->
+            <div class="storage-widget">
+                <div class="storage-widget-header">
+                    <i class="fas fa-hdd"></i>
+                    <span>Storage</span>
+                    <span class="storage-percent" id="storagePercent">0%</span>
+                </div>
+                <div class="storage-bar-track">
+                    <div class="storage-bar-fill" id="storageBarFill"></div>
+                </div>
+                <div class="storage-numbers">
+                    <span id="storageUsed">0 B</span>
+                    <span id="storageTotal">15 GB</span>
+                </div>
+                <div class="storage-file-count" id="storageFileCount">0 files</div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <div class="app-main">
+
+            <!-- Top bar -->
+            <header class="app-topbar">
+                <div class="topbar-left">
+                    <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div class="topbar-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchInput" placeholder="Search files…" oninput="filterFiles(this.value)">
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <!-- Integrated theme toggle button for dashboard -->
+                    <button class="topbar-icon-btn" onclick="toggleTheme()" title="Toggle theme">
+                        <i class="fas fa-moon" id="topbarThemeIcon"></i>
+                    </button>
+                    <div class="topbar-user" onclick="openProfileModal()">
+                        <img id="profileAvatar" src="/uploads/default-avatar.png" alt="Profile" class="topbar-avatar">
+                        <div class="topbar-user-info">
+                            <span class="topbar-name" id="userName">User</span>
+                            <span class="topbar-email" id="userEmail"></span>
+                        </div>
+                        <i class="fas fa-chevron-down topbar-chevron"></i>
+                    </div>
+                    <button class="topbar-icon-btn" onclick="changePasswordDialog()" title="Change Password"><i class="fas fa-key"></i></button>
+                    <button class="topbar-icon-btn topbar-logout" onclick="logout()" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </header>
+
+            <!-- Content area -->
+            <div class="app-content">
+
+                <!-- Breadcrumb bar -->
+                <div id="breadcrumbBar" class="breadcrumb-bar" style="display:none;"></div>
+
+                <!-- Page heading row -->
+                <div class="content-heading-row">
+                    <h2 class="content-title" id="contentTitle">My Drive</h2>
+                    <div class="view-controls">
+                        <button class="view-btn active" onclick="setView('grid')" id="gridViewBtn"><i class="fas fa-th-large"></i></button>
+                        <button class="view-btn" onclick="setView('list')" id="listViewBtn"><i class="fas fa-list"></i></button>
+                        <button class="view-btn" onclick="refreshCurrentView()" title="Refresh files"><i class="fas fa-sync-alt"></i></button>
+                    </div>
+                </div>
+
+                <!-- Upload drop zone -->
+                <div class="upload-dropzone" id="uploadDropzone"
+                     onclick="document.getElementById('fileInput').click()"
+                     ondragover="event.preventDefault(); this.classList.add('dragover')"
+                     ondragleave="this.classList.remove('dragover')"
+                     ondrop="handleDrop(event)">
+                    <div class="dropzone-inner">
+                        <div class="dropzone-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                        <p class="dropzone-text">Drop files here or <span class="dropzone-link">click to upload</span></p>
+                        <small class="dropzone-sub">Any file type &bull; Max 100MB per file</small>
+                    </div>
+                </div>
+
+                <!-- Upload progress -->
+                <div id="uploadProgressContainer" class="progress-container" style="display:none;">
+                    <div class="progress-info-row">
+                        <span class="progress-filename" id="progressFilename">Uploading…</span>
+                        <span id="uploadProgressPercent" class="progress-pct">0%</span>
+                    </div>
+                    <div class="progress-bar-wrapper">
+                        <div id="uploadProgressBar" class="progress-bar"></div>
+                    </div>
+                </div>
+
+                <!-- File grid/list -->
+                <div id="fileList" class="file-container grid-view"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================
+         PUBLIC SHARE PREVIEW PAGE — Clean standalone preview
+    ======================================================= -->
+    <div id="publicPreviewPage" class="public-preview-page" style="display:none;">
+        <header class="public-header">
+            <div class="public-brand">
+                <div class="public-brand-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                <span class="public-brand-name">Pocket Drive</span>
+            </div>
+            <div class="public-header-actions">
+                <button class="topbar-icon-btn" onclick="toggleTheme()" title="Toggle theme">
+                    <i class="fas fa-moon" id="publicThemeIcon"></i>
+                </button>
+                <a href="/" class="btn-primary-sm"><i class="fas fa-sign-in-alt"></i> Go to App</a>
+            </div>
+        </header>
+
+        <main class="public-main-container">
+            <div class="public-preview-card" id="publicPreviewCard">
+                <!-- Loading State -->
+                <div id="publicLoading" class="public-loading">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <p>Fetching shared item…</p>
+                </div>
+
+                <!-- Error / 404 State -->
+                <div id="publicError" class="public-error" style="display:none;">
+                    <div class="public-error-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                    <h2>Link Unavailable or Expired</h2>
+                    <p id="publicErrorMsg">This shared file or folder could not be found or has been deleted.</p>
+                    <a href="/" class="btn-primary" style="margin-top:16px; display:inline-flex; gap:8px;"><i class="fas fa-home"></i> Back to Pocket Drive</a>
+                </div>
+
+                <!-- Shared File Content State -->
+                <div id="publicContent" class="public-content" style="display:none;">
+                    <div class="public-file-header">
+                        <div class="public-file-icon" id="pubFileIcon"></div>
+                        <div class="public-file-info">
+                            <h1 class="public-file-title" id="pubFileName">File Name</h1>
+                            <div class="public-file-meta">
+                                <span class="pub-badge" id="pubFileType">PDF</span>
+                                <span id="pubFileSize">0 MB</span>
+                                <span class="pub-dot">&bull;</span>
+                                <span id="pubFileDate">Just now</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Media Preview Container -->
+                    <div class="public-media-box" id="pubMediaBox"></div>
+
+                    <!-- Action Toolbar -->
+                    <div class="public-action-bar">
+                        <a id="pubDownloadBtn" href="#" download class="btn-primary-download">
+                            <i class="fas fa-download"></i> Download File
+                        </a>
+                        <button class="btn-secondary-action" onclick="copyPublicShareLink()" id="pubCopyBtn">
+                            <i class="fas fa-copy"></i> Copy Link
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Shared Folder Content State -->
+                <div id="publicFolderContent" class="public-folder-content" style="display:none;">
+                    <div class="public-file-header">
+                        <div class="public-file-icon"><i class="fas fa-folder" style="font-size:42px;color:#f59e0b;"></i></div>
+                        <div class="public-file-info">
+                            <h1 class="public-file-title" id="pubFolderName">Folder Name</h1>
+                            <div class="public-file-meta">
+                                <span class="pub-badge" style="background:rgba(245,158,11,0.2);color:#f59e0b;">Shared Folder</span>
+                                <span id="pubFolderFileCount">0 files</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="pubFolderFileList" class="pub-folder-file-list"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ======================================================
+         MODALS
+    ======================================================= -->
+
+    <!-- Create Folder Modal -->
+    <div id="createFolderModal" class="modal">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-folder-plus"></i> New Folder</h3>
+                <button class="modal-close-btn" onclick="closeCreateFolderModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:24px;">
+                <div class="field-label">Folder Name</div>
+                <div class="input-group" style="margin-bottom:20px;">
+                    <i class="fas fa-folder"></i>
+                    <input type="text" id="newFolderName" placeholder="e.g. Photos, Documents…" maxlength="100"
+                           onkeydown="if(event.key==='Enter'){ event.preventDefault(); createFolder(); }">
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn-secondary" onclick="closeCreateFolderModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
+                    <button class="btn-primary" onclick="createFolder()" style="flex:1;margin:0;border-radius:12px;"><i class="fas fa-folder-plus"></i> Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Rename Folder Modal -->
+    <div id="renameFolderModal" class="modal">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-pencil-alt" style="color:#f59e0b;"></i> Rename Folder</h3>
+                <button class="modal-close-btn" onclick="closeRenameFolderModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:24px;">
+                <div class="field-label">New Folder Name</div>
+                <div class="input-group" style="margin-bottom:20px;">
+                    <i class="fas fa-folder" style="color:#f59e0b;"></i>
+                    <input type="text" id="renameFolderNameInput" placeholder="Enter new folder name…" maxlength="100"
+                           onkeydown="if(event.key==='Enter') submitRenameFolder()">
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn-secondary" onclick="closeRenameFolderModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
+                    <button class="btn-primary" onclick="submitRenameFolder()" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#fbbf24);box-shadow:0 4px 16px rgba(245,158,11,0.35);"><i class="fas fa-check"></i> Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <div class="confirm-icon-wrap" id="confirmIcon"><i class="fas fa-exclamation-triangle"></i></div>
+            <h3 class="confirm-title" id="confirmTitle">Are you sure?</h3>
+            <p class="confirm-message" id="confirmMessage">Do you want to proceed with this action?</p>
+            <div class="confirm-buttons">
+                <button class="btn-secondary" id="confirmCancelBtn" style="margin:0; width:100%; border-radius:12px;">Cancel</button>
+                <button class="btn-primary" id="confirmYesBtn" style="margin:0; width:100%; border-radius:12px;">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-share-alt"></i> Share File</h3>
+                <button class="modal-close-btn" onclick="closeShareModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="share-modal-body">
+                <div class="share-file-info">
+                    <div class="share-file-icon" id="shareFileIcon"></div>
+                    <div>
+                        <div class="share-file-name" id="shareFileName">file.pdf</div>
+                        <div class="share-file-meta" id="shareFileMeta">–</div>
+                    </div>
+                </div>
+                <div class="share-notice">
+                    <i class="fas fa-globe"></i>
+                    <span>Anyone with the link can view this file</span>
+                </div>
+                <!-- Image preview — shown only for image files -->
+                <div id="shareImagePreview" style="display:none; margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);"></div>
+                <div class="share-link-box">
+                    <input type="text" id="shareLinkInput" class="share-link-input" readonly>
+                    <button class="share-copy-btn" onclick="copyShareLink()" id="shareCopyBtn">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+                <div class="share-actions">
+                    <a id="shareOpenLink" href="#" target="_blank" rel="noopener" class="share-action-btn share-action-open">
+                        <i class="fas fa-external-link-alt"></i> Open Link
+                    </a>
+                    <a id="shareDownloadLink" href="#" download class="share-action-btn share-action-download">
+                        <i class="fas fa-download"></i> Download
+                    </a>
+                </div>
+
+                <!-- Email Share Section -->
+                <div class="share-email-section" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+                    <div style="font-weight:600;font-size:0.9rem;margin-bottom:8px;color:var(--text-1);"><i class="fas fa-user-plus" style="color:var(--accent);"></i> Share with specific people</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <input type="email" id="shareEmailInput" class="share-link-input" placeholder="friend@gmail.com" style="flex:2;min-width:150px;" onkeydown="if(event.key==='Enter') submitShareEmail()">
+                        <select id="shareRoleInput" style="flex:1;min-width:90px;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-size:0.85rem;cursor:pointer;outline:none;">
+                            <option value="viewer" selected>Viewer</option>
+                            <option value="editor">Editor</option>
+                        </select>
+                        <button class="btn-primary" onclick="submitShareEmail()" style="margin:0;padding:8px 16px;font-size:0.85rem;border-radius:10px;white-space:nowrap;"><i class="fas fa-paper-plane"></i> Share</button>
+                    </div>
+                    <div id="sharedEmailList" class="shared-email-list" style="margin-top:10px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trash Modal -->
+    <div id="trashModal" class="modal">
+        <div class="modal-content trash-modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-trash-alt"></i> Trash</h3>
+                <button class="modal-close-btn" onclick="closeTrashModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="trashList" class="trash-container"></div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal">
+        <div class="modal-content preview-modal-content">
+            <div class="modal-header">
+                <h3 id="previewFileName"><i class="fas fa-eye"></i> Preview</h3>
+                <button class="modal-close-btn" onclick="closePreviewModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="previewContent" class="preview-content"></div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content profile-modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-circle"></i> Edit Profile</h3>
+                <button class="modal-close-btn" onclick="closeProfileModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="profile-pic-section">
+                <img id="modalProfilePic" src="/uploads/default-avatar.png" alt="Profile" class="profile-avatar-large">
+                <button onclick="document.getElementById('profilePicInput').click()" class="btn-secondary"><i class="fas fa-camera"></i> Change</button>
+                <input type="file" id="profilePicInput" accept="image/*" style="display:none" onchange="uploadProfilePicture(this)">
+            </div>
+            <div class="profile-field">
+                <label>Display Name</label>
+                <input type="text" id="profileNameInput" placeholder="Your name" autocomplete="name">
+                <button onclick="updateProfileName()" class="btn-primary btn-small"><i class="fas fa-check"></i> Save</button>
+            </div>
+            <div class="profile-field" style="margin-top:20px; border-top:1px solid var(--border); padding-top:18px;">
+                <button onclick="closeProfileModal(); changePasswordDialog();" class="btn-secondary" style="width:100%; border-radius:12px; margin-top:0;">
+                    <i class="fas fa-key"></i> Change Password
+                </button>
+            </div>
+            <div id="profileMessage" class="message"></div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-key"></i> Change Password</h3>
+                <button class="modal-close-btn" onclick="closeChangePasswordModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="input-group" style="margin-top:8px;">
+                <input type="password" id="currentPassword" placeholder="Current password" class="modal-input" autocomplete="current-password">
+                <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('currentPassword', this)"></i>
+            </div>
+            <div class="input-group">
+                <input type="password" id="newPasswordModal" placeholder="New password (min 6)" class="modal-input" autocomplete="new-password">
+                <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('newPasswordModal', this)"></i>
+            </div>
+            <button onclick="submitChangePassword()" class="btn-primary"><i class="fas fa-save"></i> Update Password</button>
+            <div id="changePasswordMessage" class="message"></div>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal (Email OTP Verification) -->
+    <div id="forgotPasswordModal" class="modal">
+        <div class="modal-content" style="max-width:440px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-shield-alt"></i> Reset Password</h3>
+                <button class="modal-close-btn" onclick="closeForgotPassword()"><i class="fas fa-times"></i></button>
+            </div>
+
+            <!-- Step indicators -->
+            <div class="forgot-steps">
+                <div class="forgot-step active" id="forgotStep1Dot"><span>1</span> Email</div>
+                <div class="forgot-step-line"></div>
+                <div class="forgot-step" id="forgotStep2Dot"><span>2</span> Verify</div>
+                <div class="forgot-step-line"></div>
+                <div class="forgot-step" id="forgotStep3Dot"><span>3</span> Reset</div>
+            </div>
+
+            <!-- Step 1: Email -->
+            <div id="forgotStep1" class="forgot-step-content">
+                <p class="forgot-desc">Enter your email address and we'll send a verification code.</p>
+                <div class="field-label">Email Address</div>
+                <div class="input-group" style="margin-top:4px;">
+                    <i class="fas fa-envelope"></i>
+                    <input type="email" id="forgotEmail" placeholder="Enter your email" autocomplete="email" required>
+                </div>
+                <button onclick="sendForgotCode()" class="btn-primary" id="forgotSendBtn"><i class="fas fa-paper-plane"></i> Send Verification Code</button>
+            </div>
+
+            <!-- Step 2: OTP Code -->
+            <div id="forgotStep2" class="forgot-step-content" style="display:none;">
+                <p class="forgot-desc">Enter the 6-digit code sent to <strong id="forgotEmailDisplay"></strong></p>
+                <div class="otp-container">
+                    <input type="text" maxlength="1" class="otp-input" data-index="0" inputmode="numeric" autocomplete="one-time-code">
+                    <input type="text" maxlength="1" class="otp-input" data-index="1" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" data-index="2" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" data-index="3" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" data-index="4" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" data-index="5" inputmode="numeric">
+                </div>
+                <button onclick="verifyForgotCode()" class="btn-primary" id="forgotVerifyBtn"><i class="fas fa-check-circle"></i> Verify Code</button>
+                <div class="forgot-resend">
+                    <span id="forgotResendTimer">Resend code in <strong id="forgotCountdown">60</strong>s</span>
+                    <button id="forgotResendBtn" class="forgot-resend-btn" onclick="sendForgotCode()" style="display:none;"><i class="fas fa-redo"></i> Resend Code</button>
+                </div>
+            </div>
+
+            <!-- Step 3: New Password -->
+            <div id="forgotStep3" class="forgot-step-content" style="display:none;">
+                <p class="forgot-desc"><i class="fas fa-check-circle" style="color:var(--success);"></i> Email verified! Set your new password.</p>
+                <div class="field-label">New Password</div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="forgotNewPassword" placeholder="New password (min 6)" class="modal-input" autocomplete="new-password" required>
+                    <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('forgotNewPassword', this)"></i>
+                </div>
+                <button onclick="submitForgotReset()" class="btn-primary" id="forgotResetBtn"><i class="fas fa-check-circle"></i> Update Password</button>
+            </div>
+
+            <div id="forgotMessage" class="message"></div>
+        </div>
+    </div>
+
+    <script src="/script.js"></script>
+</body>
+</html>
