@@ -68,7 +68,31 @@ async function sendUploadNotification(ownerEmail, uploaderEmail, fileName, folde
     }
 }
 
-const upload = multer({ storage: multer.memoryStorage() });
+const { MAX_FILE_SIZE_BYTES, validateFileSafety, uploadLimiter } = require('../lib/security');
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_FILE_SIZE_BYTES },
+    fileFilter: (req, file, cb) => {
+        const check = validateFileSafety(file.originalname);
+        if (!check.allowed) {
+            return cb(new Error(check.reason), false);
+        }
+        cb(null, true);
+    }
+});
+
+function handleUpload(req, res, next) {
+    upload.single('file')(req, res, (err) => {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ error: `File is too large. Maximum allowed size is ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB.` });
+            }
+            return res.status(400).json({ error: err.message || 'File validation failed.' });
+        }
+        next();
+    });
+}
 
 function requireAuth(req, res, next) {
     const userId = (req.session && req.session.userId) || verifyToken(req);
@@ -257,7 +281,7 @@ async function canUserModifyFile(userId, fileId) {
 }
 
 // Upload file
-router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
+router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file' });
     const userId = req.session.userId;
     const folder_id = req.body.folder_id ? req.body.folder_id : null;

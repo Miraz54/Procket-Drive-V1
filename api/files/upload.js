@@ -7,6 +7,8 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : supabase;
 
+const { MAX_FILE_SIZE_BYTES, validateFileSafety } = require('../../lib/security');
+
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -17,7 +19,14 @@ function setCors(req, res) {
 
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 100 * 1024 * 1024 } // 100 MB
+    limits: { fileSize: MAX_FILE_SIZE_BYTES },
+    fileFilter: (req, file, cb) => {
+        const check = validateFileSafety(file.originalname);
+        if (!check.allowed) {
+            return cb(new Error(check.reason), false);
+        }
+        cb(null, true);
+    }
 });
 
 function runMiddleware(req, res, fn) {

@@ -4,6 +4,7 @@ const multer = require('multer');
 const validator = require('validator');
 const { createClient } = require('@supabase/supabase-js');
 const { signToken, setTokenCookie, clearTokenCookie, verifyToken } = require('../lib/auth');
+const { authLimiter } = require('../lib/security');
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ function requireAuth(req, res, next) {
 // =========================
 // REGISTER
 // =========================
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
     try {
         let { email, password } = req.body;
 
@@ -122,7 +123,7 @@ router.post('/register', async (req, res) => {
 // =========================
 // LOGIN
 // =========================
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
     try {
         let { email, password } = req.body;
 
@@ -470,7 +471,7 @@ setInterval(() => {
 }, 10 * 60 * 1000);
 
 // Step 1: Send verification code to email
-router.post('/forgot-password/send-code', async (req, res) => {
+router.post('/forgot-password/send-code', authLimiter, async (req, res) => {
     try {
         let { email } = req.body;
         email = email?.trim().toLowerCase();
@@ -518,7 +519,7 @@ router.post('/forgot-password/send-code', async (req, res) => {
 });
 
 // Step 2: Verify the code
-router.post('/forgot-password/verify-code', async (req, res) => {
+router.post('/forgot-password/verify-code', authLimiter, async (req, res) => {
     try {
         let { email, code } = req.body;
         email = email?.trim().toLowerCase();
@@ -555,7 +556,7 @@ router.post('/forgot-password/verify-code', async (req, res) => {
 });
 
 // Step 3: Reset password (only after code is verified)
-router.post('/forgot-password/reset', async (req, res) => {
+router.post('/forgot-password/reset', authLimiter, async (req, res) => {
     try {
         let { email, newPassword } = req.body;
         email = email?.trim().toLowerCase();
