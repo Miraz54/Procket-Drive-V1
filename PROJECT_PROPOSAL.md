@@ -35,8 +35,7 @@ graph TD
     end
 
     subgraph Email Delivery System
-        Server --> PrimaryEmail[Primary: Nodemailer - Gmail SMTP]
-        PrimaryEmail -.->|Failover on Error| FallbackEmail[Secondary: Resend API]
+        Server --> EmailService[Nodemailer - Gmail SMTP Service]
     end
 ```
 
@@ -56,33 +55,16 @@ Earlier revisions mentioned both `express-session` and `JWT`. In **Pocket Drive 
 
 ---
 
-## 3. Email Infrastructure & Fallback Strategy
+## 3. Email Infrastructure: Unified Nodemailer Engine
 
-Rather than using redundant services arbitrarily, Pocket Drive implements a resilient **Multi-Tier Email Fallback Architecture**:
+### Architectural Clarification
+Earlier drafts listed both *Nodemailer* and *Resend*. To eliminate redundancy and streamline the application architecture, we have standardized exclusively on **Nodemailer (Gmail SMTP)**:
 
-```mermaid
-sequenceDiagram
-    participant App as Pocket Drive Core
-    participant Primary as Nodemailer (Gmail SMTP)
-    participant Secondary as Resend API
-    participant User as Recipient Mailbox
-
-    App->>Primary: Attempt to send OTP / Notification
-    alt Primary SMTP Success
-        Primary-->>User: Delivered
-    else SMTP Limit / Timeout / Failure
-        Primary-->>App: Exception / Error
-        App->>Secondary: Trigger Failover (Resend HTTPS API)
-        Secondary-->>User: Delivered via Fallback
-    end
-```
-
-1. **Primary Engine (Nodemailer / Gmail SMTP):**
-   - Handles immediate transactional emails (e.g. 6-digit password reset OTP codes).
-   - Low cost and instant delivery for standard workloads.
-2. **Secondary Failover Engine (Resend API):**
-   - If Gmail SMTP encounters rate limits, connection timeouts, or service disruptions, the system seamlessly triggers the Resend API (`api.resend.com/emails`) as an automated fallback.
-   - Guarantees 99.99% notification delivery for mission-critical events (shared folder invites, upload alerts).
+- **Primary Transactional Engine:** Handles 6-digit password reset OTP codes and shared folder activity alerts.
+- **Why Nodemailer?**
+  - Direct SMTP protocol integration without third-party API lock-in.
+  - Zero cost with instant transactional delivery.
+  - Redundant secondary providers have been eliminated to keep the service pipeline clean and maintainable.
 
 ---
 
@@ -109,20 +91,19 @@ To prevent Distributed Denial of Service (DDoS), credential stuffing, and brute-
 
 ---
 
-## 5. File Validation & Antivirus Protection Pipeline
+## 5. File Validation & Integrated Antivirus Scanning Engine
 
 ```mermaid
 flowchart TD
     A[Incoming File Upload] --> B{Size <= 50MB?}
-    B -- No --> B1[Reject: LIMIT_FILE_SIZE]
+    B -- No --> B1[Reject: LIMIT_FILE_SIZE HTTP 400]
     B -- Yes --> C{Dangerous Extension Check?}
-    C -- Matched .exe/.bat/.sh/.ps1 etc. --> C1[Reject: Restricted File Type]
-    C -- Safe --> D{MIME Type Inspection}
-    D -- Mismatch / Suspicious --> D1[Reject: Invalid MIME]
-    D -- Verified --> E[Upload to Supabase Storage]
-    E --> F[Async Cloud Antivirus Scanner Webhook]
-    F -->|Clean| G[File Marked Active & Downloadable]
-    F -->|Infected| H[File Quarantined & Deleted + Alert Owner]
+    C -- Matched .exe/.bat/.sh/.ps1 etc. --> C1[Reject: Restricted File Type HTTP 400]
+    C -- Safe --> D{In-Engine Virus & Malware Scan}
+    D -- EICAR / WebShell / VirusTotal Match --> D1[Reject: Security Alert - Malware Detected HTTP 400]
+    D -- Clean --> E[Sanitize Filename & Compute SHA-256]
+    E --> F[Upload to Supabase Object Storage]
+    F --> G[Save Metadata & Return Clean File Object]
 ```
 
 ### 5.1. File Extension & MIME Filtering
@@ -131,11 +112,13 @@ flowchart TD
   - Scripts: `.bat`, `.cmd`, `.sh`, `.bash`, `.vbs`, `.vbe`, `.wsf`, `.ps1`, `.ps2`, `.jar`, `.reg`
 - **Sanitized Naming:** File names are sanitized on upload (`timestamp + regex-cleaned name`) to neutralize Directory Traversal (`../`) attacks.
 
-### 5.2. Antivirus & Malware Scanning Strategy
-1. **Quarantine-on-Upload State:** Files are uploaded with initial status validation.
-2. **Asynchronous Virus Scanning:**
-   - Webhook trigger to a ClamAV daemon container or cloud-native virus scanning API (e.g. AWS GuardDuty / VirusTotal API / Cloudflare Virus Scanner).
-   - If malicious signatures are identified, the storage object is permanently deleted immediately, the database record is flagged as `quarantined`, and an incident alert is dispatched to the user.
+### 5.2. Integrated Virus & Malware Scanner (`lib/virusScanner.js`)
+Pocket Drive includes an active in-engine scanning layer executed prior to cloud storage ingestion:
+1. **EICAR Signature Detection:** Standard anti-virus test file signature detection (`X5O!P%@AP...`).
+2. **WebShell & Malicious Payload Analysis:** Detects hidden PHP/ASP executable markers (e.g. `eval(base64_decode)`, `shell_exec`, `cmd.exe`) within disguised uploads.
+3. **SHA-256 Fingerprinting:** Generates a cryptographic SHA-256 hash for each uploaded file buffer.
+4. **VirusTotal Cloud API Integration:** Automated hash intelligence lookup against 70+ antivirus engines (enabled via `VIRUSTOTAL_API_KEY`).
+5. **Immediate Threat Rejection:** If malicious signatures are identified, the upload is terminated with HTTP 400 and logged to security telemetry.
 
 ---
 
@@ -149,7 +132,7 @@ flowchart TD
 | **Object Storage** | Supabase Storage (S3-compatible bucket) |
 | **Authentication** | Stateless JWT (`jsonwebtoken`), `bcryptjs`, HttpOnly Cookies |
 | **Rate Limiting** | `express-rate-limit` |
-| **Email Service** | Nodemailer (Gmail SMTP Primary) + Resend API (Failover) |
+| **Email Service** | Nodemailer (Gmail SMTP) |
 | **Frontend** | Vanilla JavaScript, HTML5, CSS3 Glassmorphism UI |
 
 ---

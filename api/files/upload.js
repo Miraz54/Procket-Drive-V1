@@ -8,6 +8,7 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     : supabase;
 
 const { MAX_FILE_SIZE_BYTES, validateFileSafety } = require('../../lib/security');
+const { scanFileBuffer } = require('../../lib/virusScanner');
 
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
@@ -191,6 +192,15 @@ async function handler(req, res) {
                     storageOwnerId = folderRow.user_id;
                 }
             } catch(e) {}
+        }
+
+        // Scan file buffer for virus / malware / malicious webshell signatures
+        const virusCheck = await scanFileBuffer(req.file.buffer, req.file.originalname, req.file.mimetype);
+        if (virusCheck.isInfected) {
+            console.warn(`[upload] Virus / Malware blocked: "${req.file.originalname}" — Threat: ${virusCheck.threatName}`);
+            return res.status(400).json({
+                error: `Security Alert: File upload rejected. Detected threat: ${virusCheck.threatName}`
+            });
         }
 
         // Build safe storage path: storageOwnerId/timestamp-safename

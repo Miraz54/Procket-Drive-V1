@@ -17,9 +17,8 @@ try { nodemailer = require('nodemailer'); } catch(e) {}
 async function sendUploadNotification(ownerEmail, uploaderEmail, fileName, folderName, folderToken) {
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
-    const resendApiKey = process.env.RESEND_API_KEY;
 
-    if (!gmailUser && !resendApiKey) return; // No email config
+    if (!gmailUser || !gmailPass) return; // No email config
 
     const folderUrl = `${process.env.APP_URL || 'https://procket-drive-v1.vercel.app'}/shared-folder/${folderToken}`;
 
@@ -53,22 +52,12 @@ async function sendUploadNotification(ownerEmail, uploaderEmail, fileName, folde
         try {
             const t = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
             await t.sendMail({ from: `"Pocket Drive" <${gmailUser}>`, to: ownerEmail, subject: `New file uploaded to "${folderName}" 📤`, html });
-            return;
         } catch(e) { console.error('[upload-notify] Gmail error:', e.message); }
-    }
-
-    if (resendApiKey) {
-        try {
-            await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ from: 'Pocket Drive <onboarding@resend.dev>', to: [ownerEmail], subject: `New file uploaded to "${folderName}" 📤`, html })
-            });
-        } catch(e) { console.error('[upload-notify] Resend error:', e.message); }
     }
 }
 
 const { MAX_FILE_SIZE_BYTES, validateFileSafety, uploadLimiter } = require('../lib/security');
+const { scanFileBuffer } = require('../lib/virusScanner');
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -316,6 +305,15 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
                 storageOwnerId = folderRow.user_id; // Use owner's storage path
             }
         } catch(e) {}
+    }
+
+    // Scan file buffer for virus / malware / malicious webshell signatures
+    const virusCheck = await scanFileBuffer(req.file.buffer, req.file.originalname, req.file.mimetype);
+    if (virusCheck.isInfected) {
+        console.warn(`[upload] Virus / Malware blocked: "${req.file.originalname}" — Threat: ${virusCheck.threatName}`);
+        return res.status(400).json({
+            error: `Security Alert: File upload rejected. Detected threat: ${virusCheck.threatName}`
+        });
     }
 
     const safeName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;

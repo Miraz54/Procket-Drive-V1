@@ -198,7 +198,6 @@ async function checkAuth() {
             const email = localStorage.getItem('pd-email');
             const password = localStorage.getItem('pd-password');
             if (remember && email && password) {
-                console.log('[auth] Auto-logging in via Remember Me...');
                 await autoLogin(email, password);
             }
         }
@@ -425,7 +424,6 @@ async function loadStorageStats() {
             updateStorageUI(allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0), allFiles.length);
             return;
         }
-        console.log('[storage] used:', json.used, 'count:', json.count);
         updateStorageUI(json.used, json.count, json.total);
     } catch(e) {
         console.error('[storage] fetch failed:', e);
@@ -475,10 +473,10 @@ async function uploadFile(input) {
     const file = input.files[0];
     if (!file) return;
 
-    // 100 MB Limit check
-    const maxSizeBytes = 100 * 1024 * 1024;
+    // 50 MB Limit check
+    const maxSizeBytes = 50 * 1024 * 1024;
     if (file.size > maxSizeBytes) {
-        showToast(`⚠️ File too large! Max limit is 100MB (Selected file: ${formatFileSize(file.size)})`, 'error', 5000);
+        showToast(`⚠️ File too large! Max limit is 50MB (Selected file: ${formatFileSize(file.size)})`, 'error', 5000);
         input.value = '';
         return;
     }
@@ -511,31 +509,32 @@ async function uploadFile(input) {
 
     xhr.onload = () => {
         if (progressWrap) progressWrap.style.display = 'none';
-        if (xhr.status === 200) {
-            const response = JSON.parse(xhr.responseText);
-            if (response.success) {
-                showToast(`✅ ${file.name} uploaded!`, 'success');
-                
-                // Check if currently inside a shared folder view
-                const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
-                if (sharedMatch) {
-                    const token = sharedMatch[1];
-                    fetch('/api/auth/me', { credentials: 'include' })
-                        .then(res => res.json())
-                        .then(userData => {
-                            showSharedFolderLoggedIn(token, userData);
-                        });
-                } else {
-                    // Optimistic storage update immediately
-                    const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) + file.size;
-                    updateStorageUI(localUsed, allFiles.length + 1);
-                    loadFiles(); // refresh (also calls loadStorageStats)
-                }
+        let response = null;
+        try {
+            response = JSON.parse(xhr.responseText);
+        } catch (e) {}
+
+        if (xhr.status === 200 && response && response.success) {
+            showToast(`✅ ${file.name} uploaded!`, 'success');
+            
+            // Check if currently inside a shared folder view
+            const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
+            if (sharedMatch) {
+                const token = sharedMatch[1];
+                fetch('/api/auth/me', { credentials: 'include' })
+                    .then(res => res.json())
+                    .then(userData => {
+                        showSharedFolderLoggedIn(token, userData);
+                    });
             } else {
-                showToast('Upload failed: ' + (response.error || 'Unknown error'), 'error');
+                // Optimistic storage update immediately
+                const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) + file.size;
+                updateStorageUI(localUsed, allFiles.length + 1);
+                loadFiles(); // refresh (also calls loadStorageStats)
             }
         } else {
-            showToast('Upload failed. Server error.', 'error');
+            const errorMsg = (response && response.error) || `Upload failed (${xhr.status || 'Server error'})`;
+            showToast(errorMsg, 'error', 6000);
         }
     };
     xhr.onerror = () => {
@@ -585,9 +584,6 @@ async function loadFiles() {
             fetch(fileUrl, { credentials: 'include' }).catch((e) => { console.error('[loadFiles] fetch files error:', e); return null; }),
             fetch(folderUrl, { credentials: 'include' }).catch((e) => { console.error('[loadFiles] fetch folders error:', e); return null; })
         ]);
-
-        console.log(`[loadFiles] filesRes status: ${filesRes ? filesRes.status : 'null'}, URL: ${fileUrl}`);
-        console.log(`[loadFiles] foldersRes status: ${foldersRes ? foldersRes.status : 'null'}, URL: ${folderUrl}`);
 
         // If either request returns 401 (unauthorized), redirect/logout to clear the UI
         if ((filesRes && filesRes.status === 401) || (foldersRes && foldersRes.status === 401)) {
@@ -749,10 +745,10 @@ function updateDropzoneLabel() {
     if (currentFolderId && folderStack.length > 0) {
         const folderName = folderStack[folderStack.length - 1].name;
         if (textEl) textEl.innerHTML = `Upload into <span class="dropzone-link">${escapeHtml(folderName)}</span>`;
-        if (subEl)  subEl.textContent = 'Files will be saved in this folder • Max 100MB per file';
+        if (subEl)  subEl.textContent = 'Files will be saved in this folder • Max 50MB per file';
     } else {
         if (textEl) textEl.innerHTML = 'Drop files here or <span class="dropzone-link">click to upload</span>';
-        if (subEl)  subEl.textContent = 'Any file type • Max 100MB per file';
+        if (subEl)  subEl.textContent = 'Any supported file • Max 50MB per file';
     }
 }
 
