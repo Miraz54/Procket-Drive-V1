@@ -473,10 +473,10 @@ async function uploadFile(input) {
     const file = input.files[0];
     if (!file) return;
 
-    // 50 MB Limit check
-    const maxSizeBytes = 50 * 1024 * 1024;
+    // 100 MB Limit check
+    const maxSizeBytes = 100 * 1024 * 1024;
     if (file.size > maxSizeBytes) {
-        showToast(`⚠️ File too large! Max limit is 50MB (Selected file: ${formatFileSize(file.size)})`, 'error', 5000);
+        showToast(`⚠️ File too large! Max limit is 100MB (Selected file: ${formatFileSize(file.size)})`, 'error', 5000);
         input.value = '';
         return;
     }
@@ -745,10 +745,10 @@ function updateDropzoneLabel() {
     if (currentFolderId && folderStack.length > 0) {
         const folderName = folderStack[folderStack.length - 1].name;
         if (textEl) textEl.innerHTML = `Upload into <span class="dropzone-link">${escapeHtml(folderName)}</span>`;
-        if (subEl)  subEl.textContent = 'Files will be saved in this folder • Max 50MB per file';
+        if (subEl)  subEl.textContent = 'Files will be saved in this folder • Max 100MB per file';
     } else {
         if (textEl) textEl.innerHTML = 'Drop files here or <span class="dropzone-link">click to upload</span>';
-        if (subEl)  subEl.textContent = 'Any supported file • Max 50MB per file';
+        if (subEl)  subEl.textContent = 'Any supported file • Max 100MB per file';
     }
 }
 

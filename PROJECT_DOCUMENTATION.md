@@ -118,7 +118,7 @@ Protects against automated bot attacks, credential brute-forcing, and resource e
 3. **Upload Limiter:** 60 uploads / 15 minutes per IP (prevents storage quota flooding).
 
 ### 4.2. File Validation & Size Enforcement
-- **Strict Size Caps:** Max **50 MB** per file enforced at both client and server buffer levels.
+- **Strict Size Caps:** Max **100 MB** per file enforced at both client and server buffer levels.
 - **Restricted Extension Blacklist:** Dangerous executables and script files are permanently rejected:
   - `.exe`, `.msi`, `.bat`, `.cmd`, `.sh`, `.vbs`, `.scr`, `.pif`, `.com`, `.ps1`, `.reg`
 - **Filename Sanitization:** Neutralizes Directory Traversal (`../`) and illegal character injection.
@@ -218,7 +218,7 @@ GMAIL_APP_PASSWORD=your-gmail-app-password
 VIRUSTOTAL_API_KEY=your_virustotal_api_key
 
 # Upload Limits
-MAX_FILE_SIZE_MB=50
+MAX_FILE_SIZE_MB=100
 ```
 
 ### 8.2. Running Locally

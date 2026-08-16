@@ -36,7 +36,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 JWT_SECRET=your-jwt-secret
 GMAIL_USER=your-email@gmail.com
 GMAIL_APP_PASSWORD=your-app-password
-MAX_FILE_SIZE_MB=50
+MAX_FILE_SIZE_MB=100
 ```
 
 ### 3. Run Locally

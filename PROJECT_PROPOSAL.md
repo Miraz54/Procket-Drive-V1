@@ -86,7 +86,7 @@ To prevent Distributed Denial of Service (DDoS), credential stuffing, and brute-
 | **File Upload** | `/api/files/upload` | 15 mins | 60 uploads | Storage flooding & denial-of-wallet protection |
 
 ### 4.3. File Size Constraints
-- **Per-file limit:** Hard-capped at **50 MB** (configurable via `MAX_FILE_SIZE_MB`).
+- **Per-file limit:** Hard-capped at **100 MB** (configurable via `MAX_FILE_SIZE_MB`).
 - Enforced at the `Multer` streaming buffer stage to prevent memory exhaustion before data reaches cloud storage.
 
 ---
@@ -95,7 +95,7 @@ To prevent Distributed Denial of Service (DDoS), credential stuffing, and brute-
 
 ```mermaid
 flowchart TD
-    A[Incoming File Upload] --> B{Size <= 50MB?}
+    A[Incoming File Upload] --> B{Size <= 100MB?}
     B -- No --> B1[Reject: LIMIT_FILE_SIZE HTTP 400]
     B -- Yes --> C{Dangerous Extension Check?}
     C -- Matched .exe/.bat/.sh/.ps1 etc. --> C1[Reject: Restricted File Type HTTP 400]
