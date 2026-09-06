@@ -1,7 +1,4 @@
-
-// ============================================================
-//  PROFESSIONAL TOAST SYSTEM
-// ============================================================
+// Toast notifications
 const TOAST_ICONS = {
     success: 'fa-circle-check',
     error:   'fa-circle-xmark',
@@ -41,56 +38,20 @@ function pdToast(type, title, msg, duration) {
         setTimeout(function() { if (t.parentNode) t.remove(); }, 380);
     }, duration);
 }
-/* ============================================================
-   POCKET DRIVE  —  script.js
-   ============================================================ */
 
+// App state
 let currentView = 'grid';
-let activeNav   = 'drive'; // tracks active sidebar view (drive, recent)
-let allFiles    = [];      // cached file list for search filtering
-let allFolders  = [];      // cached folder list for current level
-let currentFolderId = null;          // null = root
-let sharedFolderId  = null;          // folder ID when viewing a shared folder
-let folderStack = [];                // breadcrumb trail [{id, name}]
+let activeNav   = 'drive';
+let allFiles    = [];
+let allFolders  = [];
+let currentFolderId = null;
+let sharedFolderId  = null;
+let folderStack = [];
 
-// ============================================================
-//  THEME
-// ============================================================
-function toggleTheme() {
-    const isLight = document.body.classList.toggle('light-mode');
-    localStorage.setItem('pd-theme', isLight ? 'light' : 'dark');
-    updateToggleUI(isLight);
-}
+document.body.classList.add('light-mode');
+document.body.classList.remove('dark-mode');
+function toggleTheme() {}
 
-function updateToggleUI(isLight) {
-    const icon  = document.getElementById('themeIcon');
-    const label = document.getElementById('themeLabel');
-    if (icon) icon.textContent  = isLight ? '☀️' : '🌙';
-    if (label) label.textContent = isLight ? 'Light' : 'Dark';
-
-    const topbarIcon = document.getElementById('topbarThemeIcon');
-    if (topbarIcon) {
-        if (isLight) {
-            topbarIcon.className = 'fas fa-sun';
-            topbarIcon.style.color = '#f59e0b';
-        } else {
-            topbarIcon.className = 'fas fa-moon';
-            topbarIcon.style.color = '';
-        }
-    }
-}
-
-(function initTheme() {
-    const saved      = localStorage.getItem('pd-theme');
-    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-    const isLight    = saved === 'light' || (!saved && !prefersDark);
-    if (isLight) document.body.classList.add('light-mode');
-    document.addEventListener('DOMContentLoaded', () => updateToggleUI(isLight));
-})();
-
-// ============================================================
-//  TOAST
-// ============================================================
 function showToast(msg, type = 'info', duration = 2800) {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -100,9 +61,7 @@ function showToast(msg, type = 'info', duration = 2800) {
     t._timer = setTimeout(() => { t.className = 'toast'; }, duration);
 }
 
-// ============================================================
-//  AUTH TABS
-// ============================================================
+// Auth forms
 function showAuthTab(tab) {
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
@@ -116,7 +75,6 @@ function showAuthTab(tab) {
         tabLogin.classList.add('active');
         tabSignup.classList.remove('active');
         if (heading) heading.innerHTML = `
-            <h1 class="auth-title">Welcome back 👋</h1>
             <p class="auth-subtitle">Sign in to access your personal cloud storage</p>`;
     } else {
         loginForm.classList.remove('active');
@@ -124,14 +82,13 @@ function showAuthTab(tab) {
         tabLogin.classList.remove('active');
         tabSignup.classList.add('active');
         if (heading) heading.innerHTML = `
-            <h1 class="auth-title">Create account 🚀</h1>
             <p class="auth-subtitle">Join Pocket Drive — your personal cloud storage</p>`;
     }
     const m = document.getElementById('authMessage');
     if (m) m.innerHTML = '';
 }
 
-// Password visibility toggle
+// Password visibility
 window.togglePassword = function(fieldId, icon) {
     const f = document.getElementById(fieldId);
     if (!f) return;
@@ -139,7 +96,7 @@ window.togglePassword = function(fieldId, icon) {
     else                       { f.type = 'password'; icon.classList.replace('fa-eye', 'fa-eye-slash'); }
 };
 
-// Password match indicator
+// Password match validation
 document.addEventListener('DOMContentLoaded', () => {
     const pwd     = document.getElementById('signupPassword');
     const confirm = document.getElementById('signupConfirmPassword');
@@ -175,7 +132,6 @@ async function checkAuth() {
             const emailEl = document.getElementById('userEmail');
             if (emailEl) emailEl.textContent = user.email;
 
-            // Handle post-login redirection if any
             const redirectUrl = sessionStorage.getItem('pd_post_login_redirect');
             if (redirectUrl) {
                 sessionStorage.removeItem('pd_post_login_redirect');
@@ -187,13 +143,12 @@ async function checkAuth() {
             if (window.location.search.includes('view=shared') || window.location.hash === '#shared' || window.location.pathname === '/shared' || window.location.pathname === '/shared-with-me') {
                 switchView('shared');
             } else {
-                await loadFiles();          // load files first (fills allFiles)
+                await loadFiles();
             }
-            loadStorageStats();         // then stats (has fallback from allFiles)
+            loadStorageStats();
             loadUserProfile();
-            startStoragePolling();      // poll every 30 s
+            startStoragePolling();
         } else {
-            // Auto-login fallback if Remember Me was selected
             const remember = localStorage.getItem('pd-remember') === 'true';
             const email = localStorage.getItem('pd-email');
             const password = localStorage.getItem('pd-password');
@@ -254,7 +209,6 @@ async function login(e) {
             const emailEl = document.getElementById('userEmail');
             if (emailEl) emailEl.textContent = email;
 
-            // Save credentials if Remember Me is checked
             const rememberMe = document.getElementById('rememberMe')?.checked;
             if (rememberMe) {
                 localStorage.setItem('pd-remember', 'true');
@@ -274,10 +228,10 @@ async function login(e) {
             }
 
             showDashboard();
-            await loadFiles();          // files first
-            loadStorageStats();         // then stats
+            await loadFiles();
+            loadStorageStats();
             loadUserProfile();
-            startStoragePolling();      // start 30-s polling
+            startStoragePolling();
             pdToast('success','Welcome back! 👤', 'You have been signed in successfully.', 4000);
         } else {
             showMessage('authMessage', data.error, 'error');
@@ -301,7 +255,7 @@ async function signup(e) {
         const data = await res.json();
         if (res.ok) {
             showMessage('authMessage', 'Account created! Please sign in.', 'success');
-            pdToast('success', 'Account Created! ??', 'Your Pocket Drive account is ready. Please sign in.', 5000);
+            pdToast('success', 'Account Created! 🎉', 'Your Pocket Drive account is ready. Please sign in.', 5000);
             showAuthTab('login');
             ['signupEmail','signupPassword','signupConfirmPassword'].forEach(id => {
                 const el = document.getElementById(id); if (el) el.value = '';
@@ -404,9 +358,7 @@ function switchView(view) {
     }
 }
 
-// ============================================================
-//  STORAGE STATS  — real-time polling
-// ============================================================
+// Storage usage
 let _storageTimer = null;
 
 async function loadStorageStats() {
@@ -466,14 +418,12 @@ function stopStoragePolling() {
     if (_storageTimer) { clearInterval(_storageTimer); _storageTimer = null; }
 }
 
-// ============================================================
-//  FILE UPLOAD
-// ============================================================
+// File uploads
 async function uploadFile(input) {
     const file = input.files[0];
     if (!file) return;
 
-    // 100 MB Limit check
+    // 100MB limit
     const maxSizeBytes = 100 * 1024 * 1024;
     if (file.size > maxSizeBytes) {
         showToast(`⚠️ File too large! Max limit is 100MB (Selected file: ${formatFileSize(file.size)})`, 'error', 5000);
@@ -547,14 +497,14 @@ async function uploadFile(input) {
     input.value = '';
 }
 
-// Drag and drop
+// Drag & drop upload
 function handleDrop(event) {
     event.preventDefault();
     const dropzone = document.getElementById('uploadDropzone');
     if (dropzone) dropzone.classList.remove('dragover');
     const file = event.dataTransfer.files[0];
     if (!file) return;
-    // Reuse the uploadFile logic via a fake input
+
     const dt = new DataTransfer();
     dt.items.add(file);
     const fakeInput = document.createElement('input');
@@ -563,9 +513,7 @@ function handleDrop(event) {
     uploadFile(fakeInput);
 }
 
-// ============================================================
-//  LOAD & DISPLAY FILES
-// ============================================================
+// File listing & rendering
 async function loadFiles() {
     // Clear old data immediately to prevent showing stale files/folders from previous level
     allFiles = [];
@@ -670,7 +618,7 @@ function getFileIcon(mimeType, fileId, fileName) {
         return `<i class="fas fa-file-pdf" style="font-size:32px;color:#ef4444;"></i>`;
     }
     if (mimeType.includes('video') || ['mp4','webm','ogg','avi','mov','mkv'].includes(ext)) {
-        return `<i class="fas fa-file-video" style="font-size:32px;color:#8b5cf6;"></i>`;
+        return `<i class="fas fa-file-video" style="font-size:32px;color:#0284c7;"></i>`;
     }
     if (mimeType.includes('audio') || ['mp3','wav','ogg','aac','flac'].includes(ext)) {
         return `<i class="fas fa-file-audio" style="font-size:32px;color:#f59e0b;"></i>`;
@@ -694,11 +642,7 @@ function getFileIcon(mimeType, fileId, fileName) {
 }
 
 
-// ============================================================
-//  FOLDER SYSTEM
-// ============================================================
-
-// ── Open a folder (navigate into it) ────────────────────────
+// Folders
 async function openFolder(id) {
     let folder = allFolders.find(f => String(f.id) === String(id));
     let name = folder ? folder.name : 'Shared Folder';
@@ -718,7 +662,6 @@ async function openFolder(id) {
     loadFiles();
 }
 
-// ── Go back to root ──────────────────────────────────────────
 function goToRoot() {
     sharedFolderId = null;
     currentFolderId = null;
@@ -728,7 +671,6 @@ function goToRoot() {
     loadFiles();
 }
 
-// ── Navigate to specific breadcrumb depth ────────────────────
 function goToStackIndex(i) {
     folderStack = folderStack.slice(0, i + 1);
     const f = folderStack[folderStack.length - 1];
@@ -790,7 +732,7 @@ function renderDriveView(folders, files) {
                 <div class="file-name" title="${escapeHtml(f.name)}">${truncateName(f.name, 22)}</div>
                 <div class="file-size">Folder</div>
                 <div class="file-actions">
-                    <button title="Open Folder" onclick="openFolder('${f.id}')" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#fff;border-color:transparent;"><i class="fas fa-folder-open"></i></button>
+                    <button title="Open Folder" onclick="openFolder('${f.id}')"><i class="fas fa-folder-open"></i></button>
                     <button title="Share Folder" class="share-btn" onclick="shareFolderModal('${f.id}')"><i class="fas fa-share-alt"></i></button>
                     <button title="Rename" onclick="renameFolderPrompt('${f.id}')"><i class="fas fa-pencil-alt"></i></button>
                     <button title="Delete" class="delete-file-btn" onclick="deleteFolderConfirm('${f.id}')"><i class="fas fa-trash"></i></button>
@@ -827,7 +769,7 @@ function renderDriveView(folders, files) {
                     <div class="file-list-details"><div class="file-list-name">${escapeHtml(f.name)}</div><div class="file-list-meta">Folder &bull; ${new Date(f.created_at).toLocaleDateString()}</div></div>
                 </div>
                 <div class="file-list-actions">
-                    <button title="Open Folder" onclick="openFolder('${f.id}')" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#fff;border-color:transparent;"><i class="fas fa-folder-open"></i></button>
+                    <button title="Open Folder" onclick="openFolder('${f.id}')"><i class="fas fa-folder-open"></i></button>
                     <button title="Share Folder" class="share-btn" onclick="shareFolderModal('${f.id}')"><i class="fas fa-share-alt"></i></button>
                     <button title="Rename" onclick="renameFolderPrompt('${f.id}')"><i class="fas fa-pencil-alt"></i></button>
                     <button title="Delete" class="delete-file-btn" onclick="deleteFolderConfirm('${f.id}')"><i class="fas fa-trash"></i></button>
@@ -1299,9 +1241,7 @@ function setView(view) {
 }
 
 
-// ============================================================
-//  SHARE FILE  (Google Drive-style — anyone with link can download)
-// ============================================================
+// File sharing
 async function shareFile(id) {
     const file = allFiles.find(f => String(f.id) === String(id));
     const name = file ? file.name : 'File';
@@ -1381,9 +1321,7 @@ function copyShareLink() {
 
 function closeShareModal() { closeModal('shareModal'); }
 
-// ============================================================
-//  PREVIEW & DOWNLOAD
-// ============================================================
+// Preview & download
 async function previewFile(id) {
     const file = allFiles.find(f => String(f.id) === String(id));
     const name = file ? file.name : 'File';
@@ -1500,9 +1438,7 @@ async function previewSharedFile(id, name, type) {
 
 function downloadFile(id) { window.open(`/api/files/download/${id}`, '_blank'); }
 
-// ============================================================
-//  DELETE / TRASH / RESTORE
-// ============================================================
+// Trash & deletion
 async function deleteFile(id) {
     const proceed = await showConfirmDialog('Move to Trash', 'Are you sure you want to move this file to the trash?', true);
     if (!proceed) return;
@@ -1584,9 +1520,29 @@ async function permanentDeleteFile(id) {
     else { showToast('Delete failed', 'error'); }
 }
 
-// ============================================================
-//  PROFILE
-// ============================================================
+// User dropdown
+function toggleUserDropdown(event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const dropdown = document.getElementById('userDropdownMenu');
+    if (dropdown) dropdown.classList.toggle('active');
+}
+
+function closeUserDropdown() {
+    const dropdown = document.getElementById('userDropdownMenu');
+    if (dropdown) dropdown.classList.remove('active');
+}
+
+document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('userDropdownWrap');
+    if (wrap && !wrap.contains(e.target)) {
+        closeUserDropdown();
+    }
+});
+
+// Profile settings
 async function loadUserProfile() {
     try {
         const res = await fetch('/api/auth/profile', { credentials: 'include' });
@@ -1594,9 +1550,14 @@ async function loadUserProfile() {
         const user = await res.json();
         const nameEl = document.getElementById('userName');
         if (nameEl) nameEl.textContent = user.name || user.email?.split('@')[0] || 'User';
+        const emailEl = document.getElementById('userEmail');
+        if (emailEl && user.email) emailEl.textContent = user.email;
         const avatarEl = document.getElementById('profileAvatar');
-        if (avatarEl && user.profile_picture && user.profile_picture !== '/uploads/default-avatar.png') {
-            avatarEl.src = user.profile_picture + '?t=' + Date.now();
+        const dropdownAvatarEl = document.getElementById('dropdownAvatar');
+        if (user.profile_picture && user.profile_picture !== '/uploads/default-avatar.png') {
+            const newSrc = user.profile_picture + '?t=' + Date.now();
+            if (avatarEl) avatarEl.src = newSrc;
+            if (dropdownAvatarEl) dropdownAvatarEl.src = newSrc;
         }
         window.currentProfile = user;
     } catch(e) { console.error('Profile load failed', e); }
@@ -1640,7 +1601,6 @@ async function updateProfileName() {
     }
 }
 
-
 async function uploadProfilePicture(input) {
     const file = input.files[0]; if (!file) return;
     const fd = new FormData(); fd.append('profile_pic', file);
@@ -1650,6 +1610,7 @@ async function uploadProfilePicture(input) {
         showProfileMessage('Picture updated!', 'success');
         const newSrc = data.profile_picture + '?t=' + Date.now();
         const a = document.getElementById('profileAvatar'); if (a) a.src = newSrc;
+        const da = document.getElementById('dropdownAvatar'); if (da) da.src = newSrc;
         const m = document.getElementById('modalProfilePic'); if (m) m.src = newSrc;
         if (window.currentProfile) window.currentProfile.profile_picture = data.profile_picture;
         setTimeout(() => closeProfileModal(), 900);
@@ -1657,9 +1618,7 @@ async function uploadProfilePicture(input) {
     input.value = '';
 }
 
-// ============================================================
-//  CHANGE PASSWORD (standalone modal)
-// ============================================================
+// Change password
 function changePasswordDialog() {
     ['currentPassword','newPasswordModal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const msg = document.getElementById('changePasswordMessage'); if (msg) msg.innerHTML = '';
@@ -1680,9 +1639,7 @@ async function submitChangePassword() {
     } else { showMessage('changePasswordMessage', data.error, 'error'); }
 }
 
-// ============================================================
-//  FORGOT PASSWORD — EMAIL OTP VERIFICATION
-// ============================================================
+// Password reset (OTP)
 let forgotResendInterval = null;
 
 function openForgotPassword() {
@@ -1913,9 +1870,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// ============================================================
-//  MODAL HELPERS
-// ============================================================
+// Modal helpers
 function openModal(id) {
     const m = document.getElementById(id);
     if (m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
@@ -1937,9 +1892,7 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// ============================================================
-//  UTILITY
-// ============================================================
+// Utilities
 function showMessage(id, msg, type) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1947,9 +1900,7 @@ function showMessage(id, msg, type) {
     setTimeout(() => { if (el.innerHTML === msg) el.innerHTML = ''; }, 5000);
 }
 
-// ============================================================
-//  PARTICLES (subtle background)
-// ============================================================
+// Particles
 function createParticle() {
     const bg = document.querySelector('.bg-animation'); if (!bg) return;
     const p  = document.createElement('div');
@@ -1961,9 +1912,7 @@ function createParticle() {
 }
 setInterval(() => { if (Math.random() > 0.5) createParticle(); }, 3000);
 
-// ============================================================
-//  CUSTOM CONFIRMATION DIALOG
-// ============================================================
+// Confirmation dialog
 function showConfirmDialog(title, message, isDanger = true) {
     return new Promise((resolve) => {
         const modal     = document.getElementById('confirmModal');
@@ -1986,16 +1935,16 @@ function showConfirmDialog(title, message, isDanger = true) {
             iconEl.style.background = 'rgba(239, 68, 68, 0.08)';
             iconEl.style.color      = 'var(--danger)';
             iconEl.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-            yesBtn.style.background  = 'linear-gradient(135deg, #ef4444, #f87171)';
-            yesBtn.style.boxShadow   = '0 4px 16px rgba(239, 68, 68, 0.35)';
+            yesBtn.style.background  = 'var(--danger)';
+            yesBtn.style.boxShadow   = 'none';
             yesBtn.textContent       = 'Yes, Delete';
         } else {
             iconEl.innerHTML = '<i class="fas fa-info-circle"></i>';
             iconEl.style.background = 'var(--accent-sub)';
             iconEl.style.color      = 'var(--accent)';
             iconEl.style.borderColor = 'var(--border-accent)';
-            yesBtn.style.background  = 'var(--btn-grad)';
-            yesBtn.style.boxShadow   = 'var(--btn-shadow)';
+            yesBtn.style.background  = 'var(--accent)';
+            yesBtn.style.boxShadow   = 'none';
             yesBtn.textContent       = 'Confirm';
         }
 
@@ -2023,9 +1972,7 @@ function showConfirmDialog(title, message, isDanger = true) {
     });
 }
 
-// ============================================================
-//  PUBLIC SHARE PREVIEW SYSTEM
-// ============================================================
+// Public previews & routing
 async function checkPublicShareRoute() {
     const path = window.location.pathname;
     let match = path.match(/^\/(?:share\/file|s)\/([^\/]+)/);
@@ -2369,13 +2316,13 @@ async function loadPublicFolderPreview(token) {
             if (!existingUploadSection && folderBox) {
                 const uploadSection = document.createElement('div');
                 uploadSection.id = 'pubFolderUploadSection';
-                uploadSection.style.cssText = 'margin:16px 0;padding:16px;background:rgba(139,92,246,0.08);border:2px dashed rgba(139,92,246,0.35);border-radius:12px;text-align:center;';
+                uploadSection.style.cssText = 'margin:16px 0;padding:16px;background:var(--accent-sub);border:2px dashed var(--border-accent);border-radius:12px;text-align:center;';
                 uploadSection.innerHTML = `
-                    <label for="pubFolderFileInput" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;padding:9px 20px;border-radius:8px;font-size:0.9rem;font-weight:600;">
+                    <label for="pubFolderFileInput" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#fff;padding:9px 20px;border-radius:8px;font-size:0.9rem;font-weight:600;">
                         <i class="fas fa-cloud-upload-alt"></i> Upload to this Folder
                     </label>
                     <input type="file" id="pubFolderFileInput" style="display:none;" onchange="uploadFile(this)">
-                    <p style="margin-top:8px;font-size:0.78rem;color:var(--text-2,#94a3b8);">Files will be added to <strong>${escapeHtml(data.folder.name)}</strong></p>
+                    <p style="margin-top:8px;font-size:0.78rem;color:var(--text-2);">Files will be added to <strong>${escapeHtml(data.folder.name)}</strong></p>
                 `;
                 // Insert before the file list
                 const listParent = listEl ? listEl.parentNode : null;
@@ -2490,9 +2437,7 @@ function copyPublicShareLink() {
     });
 }
 
-// ============================================================
-//  INIT
-// ============================================================
+// Init
 window.addEventListener('popstate', async () => {
     const path = window.location.pathname;
     if (path === '/shared-with-me' || path === '/shared') {

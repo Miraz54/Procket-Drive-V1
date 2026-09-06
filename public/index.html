@@ -11,38 +11,24 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body>
+<body class="light-mode">
     
-    <!-- Initial App Loading Spinner Overlay -->
+    <!-- App Loader -->
     <div id="appInitSpinner" class="app-init-spinner">
         <i class="fas fa-circle-notch fa-spin fa-3x"></i>
         <h2 style="font-weight:600;font-size:1.35rem;margin:0 0 6px;">Pocket Drive</h2>
         <p style="color:var(--text-2);font-size:0.88rem;margin:0;">Initializing secure session...</p>
     </div>
 
-    <!-- Background particles (auth page) -->
     <div class="bg-animation"><div class="gradient-bg"></div></div>
 
-    <!-- Toast notification -->
+    <!-- Toasts -->
     <div id="toast-container"></div>
     <div id="toast" class="toast"></div>
 
-    <!-- Theme Toggle -->
-    <div class="theme-toggle-wrapper">
-        <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
-            <div class="toggle-track"><div class="toggle-thumb"></div></div>
-            <span class="toggle-icon" id="themeIcon">🌙</span>
-            <span id="themeLabel">Dark</span>
-        </button>
-    </div>
-
-    <!-- ======================================================
-         AUTH PAGE — Split Screen
-    ======================================================= -->
+    <!-- Auth Page -->
     <div id="authPage" class="auth-page">
-
-        <!-- LEFT: Form panel -->
-        <div class="auth-left">
+        <div class="auth-card">
             <div class="auth-brand">
                 <div class="auth-brand-icon"><i class="fas fa-cloud-upload-alt"></i></div>
                 <span class="auth-brand-name">Pocket Drive</span>
@@ -50,7 +36,6 @@
 
             <div class="auth-form-wrap">
                 <div class="auth-heading" id="authHeading">
-                    <h1 class="auth-title">Welcome back 👋</h1>
                     <p class="auth-subtitle">Sign in to access your personal cloud storage</p>
                 </div>
 
@@ -59,7 +44,7 @@
                     <button class="tab-btn" id="tabSignup" onclick="showAuthTab('signup')">Create Account</button>
                 </div>
 
-                <!-- Login -->
+                <!-- Login Form -->
                 <div id="loginForm" class="auth-form active">
                     <form onsubmit="login(event)">
                         <div class="field-label">Email address</div>
@@ -81,7 +66,7 @@
                     </form>
                 </div>
 
-                <!-- Sign Up -->
+                <!-- Signup Form -->
                 <div id="signupForm" class="auth-form">
                     <form onsubmit="signup(event)">
                         <div class="field-label">Email address</div>
@@ -111,40 +96,30 @@
 
             <p class="auth-footer-note">&copy; 2026 Pocket Drive &bull; Md. Mirazul Alam &bull; Ruma Ahmed Ety &bull; All rights reserved</p>
         </div>
-
-        <!-- RIGHT: Hero panel -->
-        <div class="auth-right">
-            <div class="hero-overlay-content">
-                <div class="hero-tag"><i class="fas fa-cloud"></i> Cloud Storage Platform</div>
-                <h2 class="hero-headline">Your files,<br>everywhere<br>you go.</h2>
-                <p class="hero-desc">Store, share and access all your documents, photos and videos — from any device, anytime.</p>
-            </div>
-        </div>
     </div>
 
-    <!-- ======================================================
-         DASHBOARD APP — Full Screen with Sidebar
-    ======================================================= -->
+    <!-- Main Dashboard -->
     <div id="appPage" class="app-page" style="display:none;">
 
-        <!-- SIDEBAR -->
+        <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
-            <!-- Brand -->
             <div class="sidebar-brand">
                 <div class="sidebar-brand-icon"><i class="fas fa-cloud-upload-alt"></i></div>
                 <span class="sidebar-brand-name">Pocket Drive</span>
             </div>
 
-            <!-- Upload button -->
-            <button class="sidebar-upload-btn" onclick="document.getElementById('fileInput').click()">
-                <i class="fas fa-plus"></i> New Upload
-            </button>
-            <button class="sidebar-upload-btn sidebar-folder-btn" onclick="openCreateFolderModal()" style="margin-top:8px; background: linear-gradient(135deg,#f59e0b,#d97706);">
-                <i class="fas fa-folder-plus"></i> New Folder
-            </button>
+            <div class="sidebar-actions-row">
+                <button class="sidebar-action-btn sidebar-upload-btn" onclick="document.getElementById('fileInput').click()" title="New Upload" aria-label="New Upload">
+                    <i class="fas fa-cloud-arrow-up"></i>
+                </button>
+                <button class="sidebar-action-btn sidebar-folder-btn" onclick="openCreateFolderModal()" title="New Folder" aria-label="New Folder">
+                    <i class="fas fa-folder-plus"></i>
+                </button>
+            </div>
             <input type="file" id="fileInput" style="display:none" onchange="uploadFile(this)">
 
-            <!-- Nav -->
+            <div class="sidebar-divider"></div>
+
             <nav class="sidebar-nav">
                 <a class="sidebar-nav-item active" id="navMyDrive" onclick="switchView('drive')">
                     <i class="fas fa-home"></i> My Drive
@@ -157,7 +132,7 @@
                 </a>
             </nav>
 
-            <!-- Storage widget -->
+            <!-- Storage Widget -->
             <div class="storage-widget">
                 <div class="storage-widget-header">
                     <i class="fas fa-hdd"></i>
@@ -175,68 +150,72 @@
             </div>
         </aside>
 
-        <!-- MAIN CONTENT -->
         <div class="app-main">
 
-            <!-- Top bar -->
+            <!-- Topbar -->
             <header class="app-topbar">
                 <div class="topbar-left">
                     <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">
                         <i class="fas fa-bars"></i>
                     </button>
+                    <h2 class="topbar-page-title" id="contentTitle">My Drive</h2>
+                </div>
+                <div class="topbar-right">
                     <div class="topbar-search">
                         <i class="fas fa-search"></i>
                         <input type="text" id="searchInput" placeholder="Search files…" oninput="filterFiles(this.value)">
                     </div>
-                </div>
-                <div class="topbar-right">
-                    <!-- Integrated theme toggle button for dashboard -->
-                    <button class="topbar-icon-btn" onclick="toggleTheme()" title="Toggle theme">
-                        <i class="fas fa-moon" id="topbarThemeIcon"></i>
-                    </button>
-                    <div class="topbar-user" onclick="openProfileModal()">
-                        <img id="profileAvatar" src="/uploads/default-avatar.png" alt="Profile" class="topbar-avatar">
-                        <div class="topbar-user-info">
-                            <span class="topbar-name" id="userName">User</span>
-                            <span class="topbar-email" id="userEmail"></span>
+                    <div class="topbar-user-dropdown-wrap" id="userDropdownWrap">
+                        <button class="topbar-avatar-btn" id="userDropdownBtn" onclick="toggleUserDropdown(event)" title="Account menu" aria-label="Account menu">
+                            <img id="profileAvatar" src="/uploads/default-avatar.png" alt="Profile" class="topbar-avatar">
+                        </button>
+                        <div class="topbar-dropdown-menu" id="userDropdownMenu">
+                            <div class="dropdown-user-header">
+                                <img id="dropdownAvatar" src="/uploads/default-avatar.png" alt="Profile" class="dropdown-avatar">
+                                <div class="dropdown-user-info">
+                                    <span class="dropdown-user-name" id="userName">User</span>
+                                    <span class="dropdown-user-email" id="userEmail"></span>
+                                </div>
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <button class="dropdown-item" onclick="closeUserDropdown(); openProfileModal();">
+                                <i class="fas fa-user-circle"></i> Edit Profile
+                            </button>
+                            <button class="dropdown-item" onclick="closeUserDropdown(); changePasswordDialog();">
+                                <i class="fas fa-key"></i> Change Password
+                            </button>
+                            <div class="dropdown-divider"></div>
+                            <button class="dropdown-item dropdown-logout-item" onclick="closeUserDropdown(); logout();">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </button>
                         </div>
-                        <i class="fas fa-chevron-down topbar-chevron"></i>
                     </div>
-                    <button class="topbar-icon-btn" onclick="changePasswordDialog()" title="Change Password"><i class="fas fa-key"></i></button>
-                    <button class="topbar-icon-btn topbar-logout" onclick="logout()" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </header>
 
-            <!-- Content area -->
             <div class="app-content">
 
-                <!-- Breadcrumb bar -->
-                <div id="breadcrumbBar" class="breadcrumb-bar" style="display:none;"></div>
-
-                <!-- Page heading row -->
-                <div class="content-heading-row">
-                    <h2 class="content-title" id="contentTitle">My Drive</h2>
-                    <div class="view-controls">
-                        <button class="view-btn active" onclick="setView('grid')" id="gridViewBtn"><i class="fas fa-th-large"></i></button>
-                        <button class="view-btn" onclick="setView('list')" id="listViewBtn"><i class="fas fa-list"></i></button>
-                        <button class="view-btn" onclick="refreshCurrentView()" title="Refresh files"><i class="fas fa-sync-alt"></i></button>
-                    </div>
-                </div>
-
-                <!-- Upload drop zone -->
+                <!-- Upload Area -->
                 <div class="upload-dropzone" id="uploadDropzone"
                      onclick="document.getElementById('fileInput').click()"
                      ondragover="event.preventDefault(); this.classList.add('dragover')"
                      ondragleave="this.classList.remove('dragover')"
                      ondrop="handleDrop(event)">
                     <div class="dropzone-inner">
-                        <div class="dropzone-icon"><i class="fas fa-cloud-upload-alt"></i></div>
-                        <p class="dropzone-text">Drop files here or <span class="dropzone-link">click to upload</span></p>
-                        <small class="dropzone-sub">Any supported file &bull; Max 100MB per file</small>
+                        <div class="dropzone-left-group">
+                            <div class="dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+                            <div class="dropzone-text-group">
+                                <p class="dropzone-text">Drop files here to upload, or <span class="dropzone-link">browse</span></p>
+                                <small class="dropzone-sub">Supports all common file types &bull; Max 100MB per file</small>
+                            </div>
+                        </div>
+                        <div class="dropzone-btn">
+                            <i class="fas fa-plus"></i> Upload Files
+                        </div>
                     </div>
                 </div>
 
-                <!-- Upload progress -->
+                <!-- Upload Progress -->
                 <div id="uploadProgressContainer" class="progress-container" style="display:none;">
                     <div class="progress-info-row">
                         <span class="progress-filename" id="progressFilename">Uploading…</span>
@@ -247,15 +226,23 @@
                     </div>
                 </div>
 
-                <!-- File grid/list -->
-                <div id="fileList" class="file-container grid-view"></div>
+                <!-- Files Section -->
+                <div class="files-section-card">
+                    <div class="files-card-header">
+                        <div id="breadcrumbBar" class="breadcrumb-bar" style="display:none;"></div>
+                        <div class="view-controls">
+                            <button class="view-btn active" onclick="setView('grid')" id="gridViewBtn" title="Grid View"><i class="fas fa-th-large"></i></button>
+                            <button class="view-btn" onclick="setView('list')" id="listViewBtn" title="List View"><i class="fas fa-list"></i></button>
+                            <button class="view-btn" onclick="refreshCurrentView()" title="Refresh files"><i class="fas fa-sync-alt"></i></button>
+                        </div>
+                    </div>
+                    <div id="fileList" class="file-container grid-view"></div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- ======================================================
-         PUBLIC SHARE PREVIEW PAGE — Clean standalone preview
-    ======================================================= -->
+    <!-- Public Share Preview -->
     <div id="publicPreviewPage" class="public-preview-page" style="display:none;">
         <header class="public-header">
             <div class="public-brand">
@@ -263,22 +250,17 @@
                 <span class="public-brand-name">Pocket Drive</span>
             </div>
             <div class="public-header-actions">
-                <button class="topbar-icon-btn" onclick="toggleTheme()" title="Toggle theme">
-                    <i class="fas fa-moon" id="publicThemeIcon"></i>
-                </button>
                 <a href="/" class="btn-primary-sm"><i class="fas fa-sign-in-alt"></i> Go to App</a>
             </div>
         </header>
 
         <main class="public-main-container">
             <div class="public-preview-card" id="publicPreviewCard">
-                <!-- Loading State -->
                 <div id="publicLoading" class="public-loading">
                     <i class="fas fa-circle-notch fa-spin"></i>
                     <p>Fetching shared item…</p>
                 </div>
 
-                <!-- Error / 404 State -->
                 <div id="publicError" class="public-error" style="display:none;">
                     <div class="public-error-icon"><i class="fas fa-exclamation-triangle"></i></div>
                     <h2>Link Unavailable or Expired</h2>
@@ -286,7 +268,7 @@
                     <a href="/" class="btn-primary" style="margin-top:16px; display:inline-flex; gap:8px;"><i class="fas fa-home"></i> Back to Pocket Drive</a>
                 </div>
 
-                <!-- Shared File Content State -->
+                <!-- Shared File Preview -->
                 <div id="publicContent" class="public-content" style="display:none;">
                     <div class="public-file-header">
                         <div class="public-file-icon" id="pubFileIcon"></div>
@@ -301,10 +283,8 @@
                         </div>
                     </div>
 
-                    <!-- Interactive Media Preview Container -->
                     <div class="public-media-box" id="pubMediaBox"></div>
 
-                    <!-- Action Toolbar -->
                     <div class="public-action-bar">
                         <a id="pubDownloadBtn" href="#" download class="btn-primary-download">
                             <i class="fas fa-download"></i> Download File
@@ -315,7 +295,7 @@
                     </div>
                 </div>
 
-                <!-- Shared Folder Content State -->
+                <!-- Shared Folder Preview -->
                 <div id="publicFolderContent" class="public-folder-content" style="display:none;">
                     <div class="public-file-header">
                         <div class="public-file-icon"><i class="fas fa-folder" style="font-size:42px;color:#f59e0b;"></i></div>
@@ -334,11 +314,9 @@
         </main>
     </div>
 
-    <!-- ======================================================
-         MODALS
-    ======================================================= -->
+    <!-- Modals -->
 
-    <!-- Create Folder Modal -->
+    <!-- Create Folder -->
     <div id="createFolderModal" class="modal">
         <div class="modal-content" style="max-width:420px;">
             <div class="modal-header">
@@ -359,7 +337,8 @@
             </div>
         </div>
     </div>
-    <!-- Rename Folder Modal -->
+
+    <!-- Rename Folder -->
     <div id="renameFolderModal" class="modal">
         <div class="modal-content" style="max-width:420px;">
             <div class="modal-header">
@@ -375,13 +354,13 @@
                 </div>
                 <div style="display:flex;gap:10px;">
                     <button class="btn-secondary" onclick="closeRenameFolderModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
-                    <button class="btn-primary" onclick="submitRenameFolder()" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#fbbf24);box-shadow:0 4px 16px rgba(245,158,11,0.35);"><i class="fas fa-check"></i> Save</button>
+                    <button class="btn-primary" onclick="submitRenameFolder()" style="flex:1;margin:0;border-radius:12px;"><i class="fas fa-check"></i> Save</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Custom Confirm Modal -->
+    <!-- Confirmation Dialog -->
     <div id="confirmModal" class="modal">
         <div class="modal-content confirm-modal-content">
             <div class="confirm-icon-wrap" id="confirmIcon"><i class="fas fa-exclamation-triangle"></i></div>
@@ -394,7 +373,7 @@
         </div>
     </div>
 
-    <!-- Share Modal -->
+    <!-- Share File Modal -->
     <div id="shareModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -413,7 +392,6 @@
                     <i class="fas fa-globe"></i>
                     <span>Anyone with the link can view this file</span>
                 </div>
-                <!-- Image preview — shown only for image files -->
                 <div id="shareImagePreview" style="display:none; margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);"></div>
                 <div class="share-link-box">
                     <input type="text" id="shareLinkInput" class="share-link-input" readonly>
@@ -430,7 +408,7 @@
                     </a>
                 </div>
 
-                <!-- Email Share Section -->
+                <!-- Email Sharing -->
                 <div class="share-email-section" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
                     <div style="font-weight:600;font-size:0.9rem;margin-bottom:8px;color:var(--text-1);"><i class="fas fa-user-plus" style="color:var(--accent);"></i> Share with specific people</div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -447,7 +425,7 @@
         </div>
     </div>
 
-    <!-- Trash Modal -->
+    <!-- Trash -->
     <div id="trashModal" class="modal">
         <div class="modal-content trash-modal-content">
             <div class="modal-header">
@@ -458,7 +436,7 @@
         </div>
     </div>
 
-    <!-- Preview Modal -->
+    <!-- File Preview -->
     <div id="previewModal" class="modal">
         <div class="modal-content preview-modal-content">
             <div class="modal-header">
@@ -469,7 +447,7 @@
         </div>
     </div>
 
-    <!-- Profile Modal -->
+    <!-- Profile Settings -->
     <div id="profileModal" class="modal">
         <div class="modal-content profile-modal-content">
             <div class="modal-header">
@@ -495,7 +473,7 @@
         </div>
     </div>
 
-    <!-- Change Password Modal -->
+    <!-- Change Password -->
     <div id="changePasswordModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -515,7 +493,7 @@
         </div>
     </div>
 
-    <!-- Forgot Password Modal (Email OTP Verification) -->
+    <!-- Forgot Password (OTP) -->
     <div id="forgotPasswordModal" class="modal">
         <div class="modal-content" style="max-width:440px;">
             <div class="modal-header">
@@ -523,7 +501,6 @@
                 <button class="modal-close-btn" onclick="closeForgotPassword()"><i class="fas fa-times"></i></button>
             </div>
 
-            <!-- Step indicators -->
             <div class="forgot-steps">
                 <div class="forgot-step active" id="forgotStep1Dot"><span>1</span> Email</div>
                 <div class="forgot-step-line"></div>
@@ -532,7 +509,7 @@
                 <div class="forgot-step" id="forgotStep3Dot"><span>3</span> Reset</div>
             </div>
 
-            <!-- Step 1: Email -->
+            <!-- Step 1 -->
             <div id="forgotStep1" class="forgot-step-content">
                 <p class="forgot-desc">Enter your email address and we'll send a verification code.</p>
                 <div class="field-label">Email Address</div>
@@ -543,7 +520,7 @@
                 <button onclick="sendForgotCode()" class="btn-primary" id="forgotSendBtn"><i class="fas fa-paper-plane"></i> Send Verification Code</button>
             </div>
 
-            <!-- Step 2: OTP Code -->
+            <!-- Step 2 -->
             <div id="forgotStep2" class="forgot-step-content" style="display:none;">
                 <p class="forgot-desc">Enter the 6-digit code sent to <strong id="forgotEmailDisplay"></strong></p>
                 <div class="otp-container">
@@ -561,7 +538,7 @@
                 </div>
             </div>
 
-            <!-- Step 3: New Password -->
+            <!-- Step 3 -->
             <div id="forgotStep3" class="forgot-step-content" style="display:none;">
                 <p class="forgot-desc"><i class="fas fa-check-circle" style="color:var(--success);"></i> Email verified! Set your new password.</p>
                 <div class="field-label">New Password</div>
