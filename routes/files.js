@@ -10,7 +10,15 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : supabase; // fallback to anon client if service key not configured
 
-let nodemailer;
+// In-memory caches for fast responses
+const thumbCache = new Map(); // fileId -> { buffer, mimeType }
+const storageStatsCache = new Map(); // userId -> { used, total, count, time }
+const MAX_THUMB_CACHE = 250;
+
+function invalidateUserCaches(userId, fileId) {
+    if (fileId) thumbCache.delete(fileId);
+    if (userId) storageStatsCache.delete(String(userId));
+}
 try { nodemailer = require('nodemailer'); } catch(e) {}
 
 // ── Send upload notification email to folder owner ──────────────
@@ -378,6 +386,8 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
         })();
     }
 
+    invalidateUserCaches(userId, inserted[0].id);
+
     res.json({
         success: true,
         is_duplicate: isDuplicate,
@@ -392,9 +402,9 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
 router.get('/list', requireAuth, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const { folder_id, all } = req.query;
-    console.log('[list] folder_id query:', folder_id || 'root', 'all:', all);
 
-    let query = supabase.from('files').select('*')
+    let query = supabaseAdmin.from('files')
+        .select('id, original_name, file_size, mime_type, uploaded_at, folder_id')
         .or('is_deleted.eq.0,is_deleted.is.null')
         .order('uploaded_at', { ascending: false });
 
@@ -416,7 +426,6 @@ router.get('/list', requireAuth, async (req, res) => {
         console.error('[list] DB error:', error);
         return res.status(500).json({ error: 'Failed' });
     }
-    console.log('[list] returned', data.length, 'files for:', folder_id || 'root');
     res.json(data.map(f => ({ id: f.id, name: f.original_name, size: Number(f.file_size) || 0, type: f.mime_type, uploaded_at: f.uploaded_at, folder_id: f.folder_id })));
 });
 
@@ -438,6 +447,7 @@ router.delete('/delete/:id', requireAuth, async (req, res) => {
         .eq('id', req.params.id);
 
     if (error) return res.status(500).json({ error: 'Move failed' });
+    invalidateUserCaches(userId, req.params.id);
     res.json({ success: true });
 });
 
@@ -452,6 +462,7 @@ router.post('/restore/:id', requireAuth, async (req, res) => {
         .eq('id', req.params.id);
 
     if (error) return res.status(500).json({ error: 'Restore failed' });
+    invalidateUserCaches(userId, req.params.id);
     res.json({ success: true });
 });
 
@@ -477,14 +488,27 @@ router.delete('/permanent/:id', requireAuth, async (req, res) => {
     const { error: deleteError } = await supabaseAdmin.from('files').delete().eq('id', req.params.id);
     if (deleteError) return res.status(500).json({ error: 'Delete failed' });
 
+    invalidateUserCaches(userId, req.params.id);
     res.json({ success: true });
 });
 
-// Preview (inline) — allows owner OR folder collaborator
+// Preview (inline) — allows owner OR folder collaborator with fast thumbnail cache
 router.get('/preview/:id', requireAuth, async (req, res) => {
-    const { data: file, error } = await supabase.from('files')
+    const fileId = req.params.id;
+    const isThumb = (req.query.thumb === '1' || req.query.thumb === 'true');
+
+    // Return instant cached thumbnail if available
+    if (isThumb && thumbCache.has(fileId)) {
+        const cached = thumbCache.get(fileId);
+        res.setHeader('Content-Type', cached.mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        res.setHeader('Content-Disposition', 'inline');
+        return res.send(cached.buffer);
+    }
+
+    const { data: file, error } = await supabaseAdmin.from('files')
         .select('file_path, mime_type, user_id, folder_id')
-        .eq('id', req.params.id)
+        .eq('id', fileId)
         .eq('is_deleted', 0)
         .maybeSingle();
     if (error || !file) return res.status(404).json({ error: 'File not found' });
@@ -498,12 +522,40 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
     }
 
-    const storagePath = file.file_path.split('/').slice(file.file_path.split('/').indexOf('userfiles') + 1).join('/');
-    const { data, error: downloadError } = await supabase.storage.from('userfiles').download(storagePath);
+    const storagePath = file.file_path.split('/userfiles/')[1];
+    if (!storagePath) return res.status(404).json({ error: 'File path invalid' });
+
+    const { data, error: downloadError } = await supabaseAdmin.storage.from('userfiles').download(storagePath);
     if (downloadError) return res.status(500).json({ error: 'Download failed' });
+    const buffer = Buffer.from(await data.arrayBuffer());
+
+    // If thumbnail requested and it's an image, generate and cache compact WebP thumbnail
+    if (isThumb && file.mime_type && file.mime_type.startsWith('image/')) {
+        try {
+            const sharp = require('sharp');
+            const thumbBuf = await sharp(buffer)
+                .resize(96, 96, { fit: 'cover', position: 'centre' })
+                .webp({ quality: 80 })
+                .toBuffer();
+
+            if (thumbCache.size >= MAX_THUMB_CACHE) {
+                const firstKey = thumbCache.keys().next().value;
+                thumbCache.delete(firstKey);
+            }
+            thumbCache.set(fileId, { buffer: thumbBuf, mimeType: 'image/webp' });
+            res.setHeader('Content-Type', 'image/webp');
+            res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+            res.setHeader('Content-Disposition', 'inline');
+            return res.send(thumbBuf);
+        } catch(e) {
+            console.warn('[preview/thumb] Sharp resize failed:', e.message);
+        }
+    }
+
     res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
     res.setHeader('Content-Disposition', 'inline');
-    res.send(Buffer.from(await data.arrayBuffer()));
+    res.send(buffer);
 });
 
 // Download (force attachment) — allows owner OR folder collaborator
@@ -546,10 +598,19 @@ router.post('/forgot-password', async (req, res) => {
     }
 });
 
-// ======================== STORAGE STATS ========================
+// ======================== STORAGE STATS (with 15s cache) ========================
 router.get('/storage-stats', requireAuth, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const userId = String(req.session.userId);
+        const now = Date.now();
+        if (storageStatsCache.has(userId)) {
+            const cached = storageStatsCache.get(userId);
+            if (now - cached.time < 15000) {
+                return res.json({ used: cached.used, total: cached.total, count: cached.count });
+            }
+        }
+
+        const { data, error } = await supabaseAdmin
             .from('files')
             .select('file_size')
             .eq('user_id', req.session.userId)
@@ -560,7 +621,7 @@ router.get('/storage-stats', requireAuth, async (req, res) => {
         }
         const usedBytes  = data.reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
         const totalBytes = 15 * 1024 * 1024 * 1024; // 15 GB cap
-        console.log(`[storage-stats] ${data.length} files, used=${usedBytes} bytes`);
+        storageStatsCache.set(userId, { used: usedBytes, total: totalBytes, count: data.length, time: now });
         res.json({ used: usedBytes, total: totalBytes, count: data.length });
     } catch (err) {
         console.error('[storage-stats] error:', err);

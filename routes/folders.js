@@ -65,8 +65,8 @@ router.get('/list', requireAuth, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
         const { parent_id } = req.query;
-        let query = supabase.from('folders')
-            .select('*')
+        let query = supabaseAdmin.from('folders')
+            .select('id, name, is_shared, shared_emails, created_at, parent_id')
             .eq('user_id', req.session.userId)
             .order('created_at', { ascending: true });
 

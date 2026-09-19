@@ -142,11 +142,11 @@ async function checkAuth() {
             showDashboard();
             if (window.location.search.includes('view=shared') || window.location.hash === '#shared' || window.location.pathname === '/shared' || window.location.pathname === '/shared-with-me') {
                 switchView('shared');
+                loadUserProfile();
             } else {
-                await loadFiles();
+                // Fetch files and profile concurrently in parallel for fast login
+                await Promise.all([loadFiles(), loadUserProfile()]);
             }
-            loadStorageStats();
-            loadUserProfile();
             startStoragePolling();
         } else {
             const remember = localStorage.getItem('pd-remember') === 'true';
@@ -184,11 +184,10 @@ async function autoLogin(email, password) {
             showDashboard();
             if (window.location.search.includes('view=shared') || window.location.hash === '#shared') {
                 switchView('shared');
+                loadUserProfile();
             } else {
-                await loadFiles();
+                await Promise.all([loadFiles(), loadUserProfile()]);
             }
-            loadStorageStats();
-            loadUserProfile();
             startStoragePolling();
         }
     } catch(e) { console.error('[auth] Auto-login failed', e); }
@@ -228,9 +227,8 @@ async function login(e) {
             }
 
             showDashboard();
-            await loadFiles();
-            loadStorageStats();
-            loadUserProfile();
+            // Parallel load for immediate response
+            await Promise.all([loadFiles(), loadUserProfile()]);
             startStoragePolling();
             pdToast('success','Welcome back! 👤', 'You have been signed in successfully.', 4000);
         } else {
@@ -411,7 +409,9 @@ function updateStorageUI(usedBytes, count, totalBytes) {
 
 function startStoragePolling() {
     if (_storageTimer) clearInterval(_storageTimer);
-    _storageTimer = setInterval(loadStorageStats, 30000); // every 30 s
+    _storageTimer = setInterval(() => {
+        if (!document.hidden) loadStorageStats();
+    }, 45000); // 45s interval, only when active
 }
 
 function stopStoragePolling() {
@@ -577,18 +577,13 @@ function handleDrop(event) {
 
 // File listing & rendering
 async function loadFiles() {
-    // Clear old data immediately to prevent showing stale files/folders from previous level
-    allFiles = [];
-    allFolders = [];
-    renderDriveView();
-
     try {
         const fileUrl = currentFolderId
-            ? `/api/files/list?folder_id=${currentFolderId}&t=${Date.now()}`
-            : `/api/files/list?t=${Date.now()}`;
+            ? `/api/files/list?folder_id=${currentFolderId}`
+            : `/api/files/list`;
         const folderUrl = currentFolderId
-            ? `/api/folders/list?parent_id=${currentFolderId}&t=${Date.now()}`
-            : `/api/folders/list?t=${Date.now()}`;
+            ? `/api/folders/list?parent_id=${currentFolderId}`
+            : `/api/folders/list`;
 
         const [filesRes, foldersRes] = await Promise.all([
             fetch(fileUrl, { credentials: 'include' }).catch((e) => { console.error('[loadFiles] fetch files error:', e); return null; }),
@@ -597,7 +592,7 @@ async function loadFiles() {
 
         // If either request returns 401 (unauthorized), redirect/logout to clear the UI
         if ((filesRes && filesRes.status === 401) || (foldersRes && foldersRes.status === 401)) {
-            console.warn('[auth] Session unauthorized (401), logging out. status: files=', filesRes ? filesRes.status : 'null', 'folders=', foldersRes ? foldersRes.status : 'null');
+            console.warn('[auth] Session unauthorized (401), logging out.');
             logout();
             return;
         }
@@ -614,7 +609,6 @@ async function loadFiles() {
         renderDriveView();
         const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
         updateStorageUI(localUsed, allFiles.length);
-        loadStorageStats();
     } catch(e) { console.error(e); }
 }
 
@@ -674,7 +668,7 @@ function getFileIcon(mimeType, fileId, fileName) {
     if (!mimeType) mimeType = '';
     const ext = (fileName || '').split('.').pop().toLowerCase();
     if (mimeType.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext)) {
-        return `<img src="/api/files/preview/${fileId}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;" onerror="this.parentElement.innerHTML='<i class=\\'fas fa-file-image\\' style=\\'font-size:32px;color:#10b981\\'></i>'">`;
+        return `<img src="/api/files/preview/${fileId}?thumb=1" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;" onerror="this.parentElement.innerHTML='<i class=\\'fas fa-file-image\\' style=\\'font-size:32px;color:#10b981\\'></i>'">`;
     }
     if (mimeType.includes('pdf') || ext === 'pdf') {
         return `<i class="fas fa-file-pdf" style="font-size:32px;color:#ef4444;"></i>`;
@@ -2841,7 +2835,7 @@ function renderAIFilePicker(query) {
 
         let previewHtml;
         if (isImg) {
-            previewHtml = `<img src="/api/files/preview/${f.id}" alt="${escapeHtml(f.name || '')}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+            previewHtml = `<img src="/api/files/preview/${f.id}?thumb=1" alt="${escapeHtml(f.name || '')}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
                         + `<div class="ai-picker-card-icon-wrap" style="display:none;"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
         } else {
             previewHtml = `<div class="ai-picker-card-icon-wrap"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
