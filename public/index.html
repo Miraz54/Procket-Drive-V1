@@ -130,6 +130,19 @@
                 <a class="sidebar-nav-item" id="navTrash" onclick="(function(){const s=document.getElementById('sidebar');if(s&&window.innerWidth<=900&&s.classList.contains('open')){s.classList.remove('open');const o=document.getElementById('sidebarOverlay');if(o)o.style.display='none';}showTrashView();})()">
                     <i class="fas fa-trash-alt"></i> Trash
                 </a>
+
+                <div class="sidebar-divider" style="margin:10px 0;"></div>
+                <div class="sidebar-section-label">AI Tools</div>
+
+                <a class="sidebar-nav-item" onclick="openAIToolsHub()" id="navAITools">
+                    <i class="fas fa-robot"></i> AI Tools Hub
+                </a>
+                <a class="sidebar-nav-item" onclick="openConvertModal()" id="navConvert">
+                    <i class="fas fa-file-export"></i> Convert to PDF
+                </a>
+                <a class="sidebar-nav-item" onclick="openOCRModal()" id="navOCR">
+                    <i class="fas fa-font"></i> OCR — Extract Text
+                </a>
             </nav>
 
             <!-- Storage Widget -->
@@ -551,6 +564,323 @@
             </div>
 
             <div id="forgotMessage" class="message"></div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         AI TOOLS MODALS
+    ══════════════════════════════════════════════════════════ -->
+
+    <!-- AI Tools Hub Modal -->
+    <div id="aiToolsHubModal" class="modal">
+        <div class="modal-content ai-hub-modal-content">
+            <div class="modal-header ai-hub-header">
+                <h3><i class="fas fa-robot"></i> AI Tools Hub</h3>
+                <button class="modal-close-btn" onclick="closeAIToolsHub()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="ai-hub-body">
+                <p class="ai-hub-subtitle">Powered by Google Gemini AI — Select a file from your Drive, then choose a tool.</p>
+
+                <div class="ai-tools-grid">
+                    <!-- Convert to PDF -->
+                    <div class="ai-tool-card" onclick="openConvertModal()">
+                        <div class="ai-tool-icon" style="background: linear-gradient(135deg,#f59e0b,#ef4444);">
+                            <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <div class="ai-tool-info">
+                            <div class="ai-tool-name">One-Click Convert</div>
+                            <div class="ai-tool-desc">Image or DOCX → PDF instantly</div>
+                        </div>
+                        <i class="fas fa-chevron-right ai-tool-arrow"></i>
+                    </div>
+
+                    <!-- AI Image Editor -->
+                    <div class="ai-tool-card" onclick="openAIImageEditorModal()">
+                        <div class="ai-tool-icon" style="background: linear-gradient(135deg,#8b5cf6,#ec4899);">
+                            <i class="fas fa-magic"></i>
+                        </div>
+                        <div class="ai-tool-info">
+                            <div class="ai-tool-name">AI Image Editor</div>
+                            <div class="ai-tool-desc">Edit images with a text prompt</div>
+                        </div>
+                        <i class="fas fa-chevron-right ai-tool-arrow"></i>
+                    </div>
+
+                    <!-- OCR -->
+                    <div class="ai-tool-card" onclick="openOCRModal()">
+                        <div class="ai-tool-icon" style="background: linear-gradient(135deg,#3b82f6,#6366f1);">
+                            <i class="fas fa-font"></i>
+                        </div>
+                        <div class="ai-tool-info">
+                            <div class="ai-tool-name">OCR — Extract Text</div>
+                            <div class="ai-tool-desc">Extract text from scanned images &amp; PDFs</div>
+                        </div>
+                        <i class="fas fa-chevron-right ai-tool-arrow"></i>
+                    </div>
+
+                    <!-- Document Summary -->
+                    <div class="ai-tool-card" onclick="openSummaryModal()">
+                        <div class="ai-tool-icon" style="background: linear-gradient(135deg,#f59e0b,#10b981);">
+                            <i class="fas fa-align-left"></i>
+                        </div>
+                        <div class="ai-tool-info">
+                            <div class="ai-tool-name">Document Summary</div>
+                            <div class="ai-tool-desc">AI summary of PDF &amp; DOCX files</div>
+                        </div>
+                        <i class="fas fa-chevron-right ai-tool-arrow"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Convert to PDF Modal -->
+    <div id="convertModal" class="modal">
+        <div class="modal-content" style="max-width:480px;">
+            <div class="modal-header" style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(239,68,68,0.15));">
+                <h3><i class="fas fa-file-pdf" style="color:#ef4444;"></i> Convert to PDF</h3>
+                <button class="modal-close-btn" onclick="closeConvertModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:24px;">
+                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Convert an image (JPG, PNG, WebP) or Word document (DOCX) to PDF and save it directly to your Drive.</p>
+
+                <div class="field-label">Select File from Drive</div>
+                <div class="ai-file-picker" id="convertFilePicker">
+                    <div class="ai-file-picker-placeholder" id="convertFilePickerPlaceholder">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <span>Click to pick a file</span>
+                    </div>
+                    <div class="ai-selected-file" id="convertSelectedFile" style="display:none;">
+                        <div class="ai-selected-file-thumb" id="convertSelectedThumb">
+                            <i class="fas fa-file" id="convertSelectedIcon"></i>
+                        </div>
+                        <div class="ai-selected-file-details">
+                            <span class="ai-selected-file-name" id="convertSelectedName">-</span>
+                            <span class="ai-selected-file-meta" id="convertSelectedMeta">-</span>
+                        </div>
+                        <button onclick="clearConvertFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <input type="hidden" id="convertFileId">
+
+                <div class="field-label" style="margin-top:16px;">Save to Folder (optional)</div>
+                <select id="convertTargetFolder" class="ai-select">
+                    <option value="">Root (My Drive)</option>
+                </select>
+
+                <div id="convertResult" class="ai-result-box" style="display:none;"></div>
+
+                <div style="display:flex;gap:10px;margin-top:20px;">
+                    <button class="btn-secondary" onclick="closeConvertModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
+                    <button class="btn-primary" onclick="doConvert()" id="convertBtn" style="flex:1;margin:0;border-radius:12px;">
+                        <i class="fas fa-magic"></i> Convert to PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Image Editor Modal -->
+    <div id="aiImageEditorModal" class="modal">
+        <div class="modal-content" style="max-width:520px;">
+            <div class="modal-header" style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(236,72,153,0.15));">
+                <h3><i class="fas fa-magic" style="color:#8b5cf6;"></i> AI Image Editor</h3>
+                <button class="modal-close-btn" onclick="closeAIImageEditorModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:24px;">
+                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Select an image from your Drive and describe the changes you want to make.</p>
+
+                <div class="field-label">Select Image from Drive</div>
+                <div class="ai-file-picker" id="imageEditFilePicker">
+                    <div class="ai-file-picker-placeholder" id="imageEditFilePickerPlaceholder">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <span>Click to pick an image</span>
+                    </div>
+                    <div class="ai-selected-file" id="imageEditSelectedFile" style="display:none;">
+                        <div class="ai-selected-file-thumb" id="imageEditSelectedThumb">
+                            <i class="fas fa-image" style="color:#8b5cf6;"></i>
+                        </div>
+                        <div class="ai-selected-file-details">
+                            <span class="ai-selected-file-name" id="imageEditSelectedName">-</span>
+                            <span class="ai-selected-file-meta" id="imageEditSelectedMeta">-</span>
+                        </div>
+                        <button onclick="clearImageEditFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <input type="hidden" id="imageEditFileId">
+
+                <!-- Image preview -->
+                <div id="imageEditPreview" style="display:none;margin:12px 0;border-radius:10px;overflow:hidden;max-height:200px;background:var(--bg-card);border:1px solid var(--border);">
+                    <img id="imageEditPreviewImg" src="" alt="Preview" style="width:100%;max-height:200px;object-fit:contain;">
+                </div>
+
+                <div class="field-label" style="margin-top:16px;">Edit Prompt</div>
+                <div class="input-group">
+                    <i class="fas fa-pencil-alt"></i>
+                    <input type="text" id="imageEditPrompt" placeholder="e.g. Remove background, make it vintage, add blur…">
+                </div>
+
+                <div class="field-label" style="margin-top:12px;">Save edited image to folder</div>
+                <select id="imageEditTargetFolder" class="ai-select">
+                    <option value="">Root (My Drive)</option>
+                </select>
+
+                <div id="imageEditResult" class="ai-result-box" style="display:none;"></div>
+
+                <div style="display:flex;gap:10px;margin-top:20px;">
+                    <button class="btn-secondary" onclick="closeAIImageEditorModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
+                    <button class="btn-primary" onclick="doAIImageEdit()" id="imageEditBtn" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#ec4899);">
+                        <i class="fas fa-magic"></i> Apply AI Edit
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OCR Modal -->
+    <div id="ocrModal" class="modal">
+        <div class="modal-content" style="max-width:560px;">
+            <div class="modal-header" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(99,102,241,0.15));">
+                <h3><i class="fas fa-font" style="color:#3b82f6;"></i> OCR — Extract Text</h3>
+                <button class="modal-close-btn" onclick="closeOCRModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:24px;">
+                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Extract text from scanned images or text-based PDFs. Optionally save the result as a .txt file.</p>
+
+                <div class="field-label">Select File from Drive</div>
+                <div class="ai-file-picker" id="ocrFilePicker">
+                    <div class="ai-file-picker-placeholder" id="ocrFilePickerPlaceholder">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <span>Click to pick a file</span>
+                    </div>
+                    <div class="ai-selected-file" id="ocrSelectedFile" style="display:none;">
+                        <div class="ai-selected-file-thumb" id="ocrSelectedThumb">
+                            <i class="fas fa-file-image" id="ocrSelectedIcon" style="color:#3b82f6;"></i>
+                        </div>
+                        <div class="ai-selected-file-details">
+                            <span class="ai-selected-file-name" id="ocrSelectedName">-</span>
+                            <span class="ai-selected-file-meta" id="ocrSelectedMeta">-</span>
+                        </div>
+                        <button onclick="clearOCRFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <input type="hidden" id="ocrFileId">
+
+                <div id="ocrTextResult" style="display:none;margin-top:16px;">
+                    <div class="field-label">Extracted Text <span id="ocrWordCount" style="color:var(--accent);font-weight:600;"></span></div>
+                    <textarea id="ocrTextArea" readonly style="width:100%;height:180px;resize:vertical;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:0.85rem;font-family:monospace;line-height:1.5;outline:none;"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:10px;">
+                        <button class="btn-secondary" onclick="copyOCRText()" style="margin:0;border-radius:10px;font-size:0.85rem;"><i class="fas fa-copy"></i> Copy Text</button>
+                        <button class="btn-primary" onclick="saveOCRText()" id="ocrSaveBtn" style="margin:0;border-radius:10px;font-size:0.85rem;">
+                            <i class="fas fa-save"></i> Save as .txt to Drive
+                        </button>
+                    </div>
+                </div>
+
+                <div id="ocrResultMsg" class="ai-result-box" style="display:none;margin-top:12px;"></div>
+
+                <div style="display:flex;gap:10px;margin-top:20px;">
+                    <button class="btn-secondary" onclick="closeOCRModal()" style="flex:1;margin:0;border-radius:12px;">Close</button>
+                    <button class="btn-primary" onclick="doOCR()" id="ocrBtn" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#6366f1);">
+                        <i class="fas fa-font"></i> Extract Text
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Summary Modal -->
+    <div id="summaryModal" class="modal">
+        <div class="modal-content" style="max-width:560px;">
+            <div class="modal-header" style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(16,185,129,0.15));">
+                <h3><i class="fas fa-align-left" style="color:#f59e0b;"></i> Document Summary</h3>
+                <button class="modal-close-btn" onclick="closeSummaryModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:24px;">
+                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">AI reads your PDF or DOCX and generates a structured summary with key points.</p>
+
+                <div class="field-label">Select Document from Drive</div>
+                <div class="ai-file-picker" id="summaryFilePicker">
+                    <div class="ai-file-picker-placeholder" id="summaryFilePickerPlaceholder">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <span>Click to pick a PDF or DOCX</span>
+                    </div>
+                    <div class="ai-selected-file" id="summarySelectedFile" style="display:none;">
+                        <div class="ai-selected-file-thumb" id="summarySelectedThumb">
+                            <i class="fas fa-file-alt" id="summarySelectedIcon" style="color:#f59e0b;"></i>
+                        </div>
+                        <div class="ai-selected-file-details">
+                            <span class="ai-selected-file-name" id="summarySelectedName">-</span>
+                            <span class="ai-selected-file-meta" id="summarySelectedMeta">-</span>
+                        </div>
+                        <button onclick="clearSummaryFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <input type="hidden" id="summaryFileId">
+
+                <div id="summaryTextResult" style="display:none;margin-top:16px;">
+                    <div class="field-label">AI Generated Summary</div>
+                    <div id="summaryTextArea" style="width:100%;min-height:160px;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.88rem;line-height:1.7;overflow-y:auto;max-height:300px;"></div>
+                    <div style="display:flex;gap:8px;margin-top:10px;">
+                        <button class="btn-secondary" onclick="copySummaryText()" style="margin:0;border-radius:10px;font-size:0.85rem;"><i class="fas fa-copy"></i> Copy Summary</button>
+                        <button class="btn-primary" onclick="saveSummaryText()" id="summarySaveBtn" style="margin:0;border-radius:10px;font-size:0.85rem;">
+                            <i class="fas fa-save"></i> Save as .txt to Drive
+                        </button>
+                    </div>
+                </div>
+
+                <div id="summaryResultMsg" class="ai-result-box" style="display:none;margin-top:12px;"></div>
+
+                <div style="display:flex;gap:10px;margin-top:20px;">
+                    <button class="btn-secondary" onclick="closeSummaryModal()" style="flex:1;margin:0;border-radius:12px;">Close</button>
+                    <button class="btn-primary" onclick="doSummarize()" id="summaryBtn" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#10b981);">
+                        <i class="fas fa-align-left"></i> Summarize Document
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Duplicate File Warning Modal -->
+    <div id="duplicateWarningModal" class="modal" style="z-index: 1200;">
+        <div class="modal-content" style="max-width: 440px; text-align: center; padding: 26px 22px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(245, 158, 11, 0.15); color: #f59e0b; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin: 0 auto 16px auto;">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3 style="margin-bottom: 8px; font-size: 1.2rem; color: var(--text-1);">Duplicate File Warning</h3>
+            <p id="dupWarningText" style="color: var(--text-2); font-size: 0.9rem; line-height: 1.5; margin-bottom: 22px; word-break: break-word;">
+                A file with this name already exists in this folder.
+            </p>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-secondary" id="dupCancelBtn" style="flex: 1; border-radius: 12px; margin: 0;">Cancel Upload</button>
+                <button class="btn-primary" id="dupProceedBtn" style="flex: 1; border-radius: 12px; margin: 0; background: #f59e0b; border-color: #f59e0b;">Keep Both</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Picker Modal (shared by all AI tools - Grid View) -->
+    <div id="aiFilePickerModal" class="modal">
+        <div class="modal-content" style="max-width:760px;width:94%;">
+            <div class="modal-header">
+                <h3><i class="fas fa-th-large" style="color:var(--accent);"></i> Select File from Drive</h3>
+                <button class="modal-close-btn" onclick="closeAIFilePicker()"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:16px 20px;">
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+                    <div class="topbar-search" style="flex:1;margin:0;">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="aiFilePickerSearch" placeholder="Search files by name…" oninput="filterAIFilePicker(this.value)">
+                    </div>
+                    <span id="aiPickerCount" class="ai-picker-count-badge"></span>
+                </div>
+                <div class="ai-picker-filter-tabs" id="aiPickerTabs">
+                    <button class="ai-picker-tab-btn active" id="tab-all" onclick="setAIPickerCategory('all', this)"><i class="fas fa-layer-group"></i> All</button>
+                    <button class="ai-picker-tab-btn" id="tab-image" onclick="setAIPickerCategory('image', this)"><i class="fas fa-image"></i> Images</button>
+                    <button class="ai-picker-tab-btn" id="tab-pdf" onclick="setAIPickerCategory('pdf', this)"><i class="fas fa-file-pdf"></i> PDFs</button>
+                    <button class="ai-picker-tab-btn" id="tab-docx" onclick="setAIPickerCategory('docx', this)"><i class="fas fa-file-word"></i> Word (DOCX)</button>
+                </div>
+                <div id="aiFilePickerList" class="ai-picker-grid"></div>
+            </div>
         </div>
     </div>
 

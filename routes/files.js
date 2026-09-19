@@ -323,6 +323,19 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
         console.error('[upload] Storage error:', uploadError);
         return res.status(500).json({ error: 'Upload failed: ' + uploadError.message });
     }
+    // Check for duplicate file name in this folder
+    let dupQuery = supabaseAdmin.from('files').select('id')
+        .eq('user_id', userId)
+        .eq('original_name', req.file.originalname)
+        .or('is_deleted.eq.0,is_deleted.is.null');
+    if (folder_id) {
+        dupQuery = dupQuery.eq('folder_id', folder_id);
+    } else {
+        dupQuery = dupQuery.is('folder_id', null);
+    }
+    const { data: existingDups } = await dupQuery;
+    const isDuplicate = Boolean(existingDups && existingDups.length > 0);
+
     const { data: urlData } = supabaseAdmin.storage.from('userfiles').getPublicUrl(filePath);
     const { data: inserted, error: dbError } = await supabaseAdmin.from('files').insert([{
         user_id: userId,          // Uploader's ID (for their file list)
@@ -365,7 +378,12 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
         })();
     }
 
-    res.json({ success: true, file: { id: inserted[0].id, name: req.file.originalname, size: req.file.size, type: req.file.mimetype, folder_id: folder_id } });
+    res.json({
+        success: true,
+        is_duplicate: isDuplicate,
+        duplicate_count: isDuplicate ? existingDups.length : 0,
+        file: { id: inserted[0].id, name: req.file.originalname, size: req.file.size, type: req.file.mimetype, folder_id: folder_id }
+    });
 });
 
 
@@ -373,14 +391,16 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
 // List files (optionally filtered by folder_id)
 router.get('/list', requireAuth, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    const { folder_id } = req.query;
-    console.log('[list] folder_id query:', folder_id || 'root');
+    const { folder_id, all } = req.query;
+    console.log('[list] folder_id query:', folder_id || 'root', 'all:', all);
 
     let query = supabase.from('files').select('*')
         .or('is_deleted.eq.0,is_deleted.is.null')
         .order('uploaded_at', { ascending: false });
 
-    if (folder_id) {
+    if (all === 'true') {
+        query = query.eq('user_id', req.session.userId);
+    } else if (folder_id) {
         // Verify access to folder
         const hasAccess = await checkFolderAccess(req.session.userId, folder_id);
         if (!hasAccess) {

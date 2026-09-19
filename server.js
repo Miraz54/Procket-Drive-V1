@@ -5,6 +5,7 @@ const path = require('path');
 const authRoutes = require('./routes/auth');
 const fileRoutes = require('./routes/files');
 const folderRoutes = require('./routes/folders');
+const aiRoutes = require('./routes/ai');
 const { apiLimiter } = require('./lib/security');
 
 const app = express();
@@ -57,6 +58,7 @@ app.use('/api', apiLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/folders', folderRoutes);
+app.use('/api/ai', aiRoutes);
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;

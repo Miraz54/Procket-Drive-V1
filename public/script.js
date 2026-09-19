@@ -418,7 +418,37 @@ function stopStoragePolling() {
     if (_storageTimer) { clearInterval(_storageTimer); _storageTimer = null; }
 }
 
-// File uploads
+// File uploads & duplicate warning state
+let _pendingUploadFile = null;
+let _pendingUploadInput = null;
+
+function setupDuplicateWarningHandlers() {
+    const cancelBtn = document.getElementById('dupCancelBtn');
+    const proceedBtn = document.getElementById('dupProceedBtn');
+    if (cancelBtn) {
+        cancelBtn.onclick = function() {
+            closeModal('duplicateWarningModal');
+            if (_pendingUploadInput) _pendingUploadInput.value = '';
+            showToast('Upload cancelled for duplicate file.', 'info');
+            _pendingUploadFile = null;
+            _pendingUploadInput = null;
+        };
+    }
+    if (proceedBtn) {
+        proceedBtn.onclick = function() {
+            closeModal('duplicateWarningModal');
+            if (_pendingUploadFile && _pendingUploadInput) {
+                showToast(`⚠️ Uploading duplicate copy of "${_pendingUploadFile.name}"...`, 'warning');
+                proceedUpload(_pendingUploadFile, _pendingUploadInput);
+            }
+            _pendingUploadFile = null;
+            _pendingUploadInput = null;
+        };
+    }
+}
+// Attach duplicate modal handlers
+setupDuplicateWarningHandlers();
+
 async function uploadFile(input) {
     const file = input.files[0];
     if (!file) return;
@@ -431,7 +461,35 @@ async function uploadFile(input) {
         return;
     }
 
+    // Check for duplicate file name in current folder / view
+    const isDuplicate = Array.isArray(allFiles) && allFiles.some(f =>
+        f.name && f.name.trim().toLowerCase() === file.name.trim().toLowerCase()
+    );
 
+    if (isDuplicate) {
+        _pendingUploadFile = file;
+        _pendingUploadInput = input;
+        setupDuplicateWarningHandlers();
+        const dupModal = document.getElementById('duplicateWarningModal');
+        const dupText = document.getElementById('dupWarningText');
+        if (dupModal && dupText) {
+            dupText.innerHTML = `<strong>"${escapeHtml(file.name)}"</strong> নামের একটি ফাইল ইতিমধ্যে এই ফোল্ডারে রয়েছে!<br><br>আপনি কি একই নামের আরেকটি কপি আপলোড করতে চান?`;
+            openModal('duplicateWarningModal');
+            return;
+        } else {
+            const proceed = confirm(`⚠️ Duplicate File Warning:\n\n"${file.name}" already exists in this folder!\n\nDo you want to upload it anyway?`);
+            if (!proceed) {
+                showToast(`Upload cancelled: "${file.name}" already exists.`, 'info');
+                input.value = '';
+                return;
+            }
+        }
+    }
+
+    proceedUpload(file, input);
+}
+
+function proceedUpload(file, input) {
     const formData = new FormData();
     formData.append('file', file);
     // Use shared folder context if viewing a shared folder, otherwise use current folder
@@ -465,7 +523,11 @@ async function uploadFile(input) {
         } catch (e) {}
 
         if (xhr.status === 200 && response && response.success) {
-            showToast(`✅ ${file.name} uploaded!`, 'success');
+            if (response.is_duplicate) {
+                showToast(`⚠️ ${file.name} uploaded (Warning: duplicate file in this folder)`, 'warning', 6000);
+            } else {
+                showToast(`✅ ${file.name} uploaded!`, 'success');
+            }
             
             // Check if currently inside a shared folder view
             const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
@@ -494,7 +556,7 @@ async function uploadFile(input) {
 
     xhr.open('POST', '/api/files/upload', true);
     xhr.send(formData);
-    input.value = '';
+    if (input) input.value = '';
 }
 
 // Drag & drop upload
@@ -2454,3 +2516,740 @@ window.addEventListener('popstate', async () => {
         checkAuth();
     }
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AI TOOLS — Complete Implementation
+//  Features: Convert, AI Image Edit, AI Tag, OCR, Document Summary
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Shared State ─────────────────────────────────────────────────────────────
+let _aiAllFiles       = [];
+let _aiPickerCallback = null;
+let _aiPickerFilter   = null;
+let _ocrCurrentFileId = null;
+let _summaryCurrentFileId = null;
+let _ocrExtractedText = '';
+let _summaryText      = '';
+
+// ── Helper: format bytes ──────────────────────────────────────────────────────
+function aiFormatBytes(b) {
+    if (!b) return '0 B';
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(1) + ' MB';
+}
+
+// ── Helper: get file type icon & color ───────────────────────────────────────
+function aiFileIcon(mime, name) {
+    const ext = (name || '').split('.').pop().toLowerCase();
+    if ((mime||'').startsWith('image/')) return { icon: 'fa-image', color: '#8b5cf6' };
+    if (ext === 'pdf' || mime === 'application/pdf') return { icon: 'fa-file-pdf', color: '#ef4444' };
+    if (['doc','docx'].includes(ext)) return { icon: 'fa-file-word', color: '#3b82f6' };
+    if (['txt'].includes(ext)) return { icon: 'fa-file-alt', color: '#64748b' };
+    return { icon: 'fa-file', color: '#64748b' };
+}
+
+// ── Helper: show result box ───────────────────────────────────────────────────
+function aiShowResult(elId, type, html) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.className = 'ai-result-box ' + type;
+    el.innerHTML = html;
+    el.style.display = 'block';
+}
+
+// ── Helper: set button loading state ─────────────────────────────────────────
+function aiSetBtnLoading(btnId, loading, label, icon) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    if (loading) {
+        btn.disabled = true;
+        btn.classList.add('ai-processing');
+        btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Processing…`;
+    } else {
+        btn.disabled = false;
+        btn.classList.remove('ai-processing');
+        btn.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+    }
+}
+
+// ── Load folders for dropdowns ────────────────────────────────────────────────
+async function aiLoadFolderOptions(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    while (sel.options.length > 1) sel.remove(1);
+    try {
+        const resp = await fetch('/api/folders/list', { credentials: 'include' });
+        const data = await resp.json();
+        if (Array.isArray(data)) {
+            data.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.id;
+                opt.textContent = '📁 ' + f.name;
+                sel.appendChild(opt);
+            });
+        }
+    } catch(e) {}
+}
+
+// ── Fetch all user files for AI file picker ───────────────────────────────────
+async function aiLoadAllFiles() {
+    try {
+        const resp = await fetch('/api/files/list?all=true&t=' + Date.now(), { credentials: 'include' });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (Array.isArray(data)) _aiAllFiles = data;
+        }
+    } catch(e) { _aiAllFiles = []; }
+}
+
+// ── Attach click handlers to AI file pickers (called once after DOM ready) ───
+let _aiPickersAttached = false;
+let _aiPickerCategory  = 'all';
+
+function attachAIPickerEvents() {
+    if (_aiPickersAttached) return;
+    _aiPickersAttached = true;
+
+    // Convert to PDF picker
+    const picker = document.getElementById('convertFilePicker');
+    if (picker) {
+        picker.addEventListener('click', function(e) {
+            if (e.target.closest('.ai-clear-btn')) return;
+            openAIFilePicker(function(file) {
+                document.getElementById('convertFileId').value = file.id;
+                document.getElementById('convertSelectedName').textContent = file.name;
+                const isImg = (file.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+                const thumbEl = document.getElementById('convertSelectedThumb');
+                if (thumbEl) {
+                    if (isImg) {
+                        thumbEl.innerHTML = `<img src="/api/files/preview/${file.id}" alt="Preview" style="width:100%;height:100%;object-fit:cover;">`;
+                    } else {
+                        const ic = aiFileIcon(file.type, file.name);
+                        thumbEl.innerHTML = `<i class="fas ${ic.icon}" style="color:${ic.color};"></i>`;
+                    }
+                }
+                const metaEl = document.getElementById('convertSelectedMeta');
+                if (metaEl) metaEl.textContent = aiFormatBytes(file.size);
+                document.getElementById('convertSelectedFile').style.display = 'flex';
+                document.getElementById('convertFilePickerPlaceholder').style.display = 'none';
+                document.getElementById('convertResult').style.display = 'none';
+            }, 'convertable');
+        });
+    }
+
+    // Image Edit picker
+    const ipPicker = document.getElementById('imageEditFilePicker');
+    if (ipPicker) {
+        ipPicker.addEventListener('click', function(e) {
+            if (e.target.closest('.ai-clear-btn')) return;
+            openAIFilePicker(function(file) {
+                document.getElementById('imageEditFileId').value = file.id;
+                document.getElementById('imageEditSelectedName').textContent = file.name;
+                const thumbEl = document.getElementById('imageEditSelectedThumb');
+                if (thumbEl) {
+                    thumbEl.innerHTML = `<img src="/api/files/preview/${file.id}" alt="Preview" style="width:100%;height:100%;object-fit:cover;">`;
+                }
+                const metaEl = document.getElementById('imageEditSelectedMeta');
+                if (metaEl) metaEl.textContent = aiFormatBytes(file.size);
+                document.getElementById('imageEditSelectedFile').style.display = 'flex';
+                document.getElementById('imageEditFilePickerPlaceholder').style.display = 'none';
+                document.getElementById('imageEditResult').style.display = 'none';
+                if ((file.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name)) {
+                    document.getElementById('imageEditPreviewImg').src = '/api/files/preview/' + file.id;
+                    document.getElementById('imageEditPreview').style.display = 'block';
+                } else {
+                    document.getElementById('imageEditPreview').style.display = 'none';
+                }
+            }, 'image');
+        });
+    }
+
+    // OCR picker
+    const ocrPicker = document.getElementById('ocrFilePicker');
+    if (ocrPicker) {
+        ocrPicker.addEventListener('click', function(e) {
+            if (e.target.closest('.ai-clear-btn')) return;
+            openAIFilePicker(function(file) {
+                document.getElementById('ocrFileId').value = file.id;
+                document.getElementById('ocrSelectedName').textContent = file.name;
+                const isImg = (file.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+                const thumbEl = document.getElementById('ocrSelectedThumb');
+                if (thumbEl) {
+                    if (isImg) {
+                        thumbEl.innerHTML = `<img src="/api/files/preview/${file.id}" alt="Preview" style="width:100%;height:100%;object-fit:cover;">`;
+                    } else {
+                        const ic = aiFileIcon(file.type, file.name);
+                        thumbEl.innerHTML = `<i class="fas ${ic.icon}" style="color:${ic.color};"></i>`;
+                    }
+                }
+                const metaEl = document.getElementById('ocrSelectedMeta');
+                if (metaEl) metaEl.textContent = aiFormatBytes(file.size);
+                document.getElementById('ocrSelectedFile').style.display = 'flex';
+                document.getElementById('ocrFilePickerPlaceholder').style.display = 'none';
+                document.getElementById('ocrTextResult').style.display = 'none';
+                document.getElementById('ocrResultMsg').style.display = 'none';
+                _ocrCurrentFileId = file.id;
+            }, null);
+        });
+    }
+
+    // Summary picker
+    const sumPicker = document.getElementById('summaryFilePicker');
+    if (sumPicker) {
+        sumPicker.addEventListener('click', function(e) {
+            if (e.target.closest('.ai-clear-btn')) return;
+            openAIFilePicker(function(file) {
+                document.getElementById('summaryFileId').value = file.id;
+                document.getElementById('summarySelectedName').textContent = file.name;
+                const thumbEl = document.getElementById('summarySelectedThumb');
+                if (thumbEl) {
+                    const ic = aiFileIcon(file.type, file.name);
+                    thumbEl.innerHTML = `<i class="fas ${ic.icon}" style="color:${ic.color};"></i>`;
+                }
+                const metaEl = document.getElementById('summarySelectedMeta');
+                if (metaEl) metaEl.textContent = aiFormatBytes(file.size);
+                document.getElementById('summarySelectedFile').style.display = 'flex';
+                document.getElementById('summaryFilePickerPlaceholder').style.display = 'none';
+                document.getElementById('summaryTextResult').style.display = 'none';
+                document.getElementById('summaryResultMsg').style.display = 'none';
+                _summaryCurrentFileId = file.id;
+            }, 'pdfdocx');
+        });
+    }
+}
+
+// Attach events immediately (DOM already loaded since script is at bottom of <body>)
+attachAIPickerEvents();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AI FILE PICKER MODAL (shared by all tools — Grid View)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function openAIFilePicker(callback, filterType) {
+    _aiPickerCallback = callback;
+    _aiPickerFilter   = filterType || null;
+    _aiPickerCategory = 'all';
+
+    // Reset tabs
+    document.querySelectorAll('.ai-picker-tab-btn').forEach(btn => btn.classList.remove('active'));
+    const allTab = document.getElementById('tab-all');
+    if (allTab) allTab.classList.add('active');
+
+    openModal('aiFilePickerModal');
+    const searchInput = document.getElementById('aiFilePickerSearch');
+    if (searchInput) searchInput.value = '';
+
+    if (!_aiAllFiles || _aiAllFiles.length === 0) {
+        const list = document.getElementById('aiFilePickerList');
+        if (list) {
+            list.innerHTML = '<div class="ai-picker-empty"><i class="fas fa-circle-notch fa-spin" style="font-size:2rem;margin-bottom:10px;display:block;color:var(--accent);"></i>Loading Drive files…</div>';
+        }
+        await aiLoadAllFiles();
+    }
+    renderAIFilePicker('');
+    setTimeout(function() {
+        if (searchInput) searchInput.focus();
+    }, 150);
+}
+
+function setAIPickerCategory(cat, btnEl) {
+    _aiPickerCategory = cat;
+    document.querySelectorAll('.ai-picker-tab-btn').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+    const query = (document.getElementById('aiFilePickerSearch') || {}).value || '';
+    renderAIFilePicker(query);
+}
+
+function closeAIFilePicker() {
+    closeModal('aiFilePickerModal');
+    _aiPickerCallback = null;
+    // Maintain body scroll lock if any tool modal is still open underneath
+    const openModals = document.querySelectorAll('.modal');
+    for (let i = 0; i < openModals.length; i++) {
+        if (openModals[i].id !== 'aiFilePickerModal' && openModals[i].style.display === 'flex') {
+            document.body.style.overflow = 'hidden';
+            break;
+        }
+    }
+}
+
+function filterAIFilePicker(query) {
+    renderAIFilePicker(query);
+}
+
+function renderAIFilePicker(query) {
+    const list = document.getElementById('aiFilePickerList');
+    if (!list) return;
+
+    let files = _aiAllFiles || [];
+
+    // Filter by tool requirement
+    if (_aiPickerFilter === 'image') {
+        files = files.filter(f => (f.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(f.name||''));
+    } else if (_aiPickerFilter === 'pdf') {
+        files = files.filter(f => f.type === 'application/pdf' || (f.name||'').toLowerCase().endsWith('.pdf'));
+    } else if (_aiPickerFilter === 'pdfdocx') {
+        files = files.filter(f =>
+            (f.type||'').startsWith('image/') === false && (
+                f.type === 'application/pdf' ||
+                (f.name||'').toLowerCase().endsWith('.pdf') ||
+                (f.name||'').toLowerCase().endsWith('.docx') ||
+                (f.name||'').toLowerCase().endsWith('.doc') ||
+                f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                f.type === 'text/plain' ||
+                (f.name||'').toLowerCase().endsWith('.txt')
+            )
+        );
+    } else if (_aiPickerFilter === 'convertable') {
+        files = files.filter(f =>
+            (f.type||'').startsWith('image/') ||
+            /\.(jpe?g|png|webp|bmp)$/i.test(f.name||'') ||
+            (f.name||'').toLowerCase().endsWith('.docx') ||
+            (f.name||'').toLowerCase().endsWith('.doc') ||
+            f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+    }
+
+    // Category tab filter
+    if (_aiPickerCategory === 'image') {
+        files = files.filter(f => (f.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(f.name||''));
+    } else if (_aiPickerCategory === 'pdf') {
+        files = files.filter(f => f.type === 'application/pdf' || (f.name||'').toLowerCase().endsWith('.pdf'));
+    } else if (_aiPickerCategory === 'docx') {
+        files = files.filter(f => (f.name||'').toLowerCase().endsWith('.docx') || (f.name||'').toLowerCase().endsWith('.doc'));
+    }
+
+    if (query) {
+        const q = query.toLowerCase();
+        files = files.filter(f => (f.name||'').toLowerCase().includes(q));
+    }
+
+    const countEl = document.getElementById('aiPickerCount');
+    if (countEl) countEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
+
+    if (!files.length) {
+        list.className = 'ai-picker-grid';
+        list.innerHTML = '<div class="ai-picker-empty"><i class="fas fa-search" style="font-size:2rem;margin-bottom:10px;display:block;opacity:0.4;"></i>No matching files found.</div>';
+        return;
+    }
+
+    list.className = 'ai-picker-grid';
+    list.innerHTML = files.map(function(f, idx) {
+        const ic = aiFileIcon(f.type, f.name);
+        const isImg = (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name || '');
+        const ext = ((f.name || '').split('.').pop() || 'file').slice(0, 4);
+
+        let previewHtml;
+        if (isImg) {
+            previewHtml = `<img src="/api/files/preview/${f.id}" alt="${escapeHtml(f.name || '')}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+                        + `<div class="ai-picker-card-icon-wrap" style="display:none;"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
+        } else {
+            previewHtml = `<div class="ai-picker-card-icon-wrap"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
+        }
+
+        return '<div class="ai-picker-card" data-idx="' + idx + '" title="' + escapeHtml(f.name || '') + '">'
+             + '<div class="ai-picker-card-preview">' + previewHtml + '<div class="ai-picker-card-check"><i class="fas fa-check"></i></div></div>'
+             + '<div class="ai-picker-card-info">'
+             + '<div class="ai-picker-card-title">' + escapeHtml(f.name || 'Unknown') + '</div>'
+             + '<div class="ai-picker-card-size">' + aiFormatBytes(f.size) + '</div>'
+             + '</div>'
+             + '</div>';
+    }).join('');
+
+    // Attach click handlers cleanly to avoid any syntax errors with quotes in filenames
+    list.querySelectorAll('.ai-picker-card').forEach(function(item) {
+        item.addEventListener('click', function() {
+            const idx = parseInt(this.getAttribute('data-idx'), 10);
+            const chosen = files[idx];
+            if (chosen) {
+                selectAIFile(chosen.id, chosen.name, chosen.type, chosen.size);
+            }
+        });
+    });
+}
+
+function selectAIFile(id, name, type, size) {
+    const cb = _aiPickerCallback;
+    closeAIFilePicker();
+    if (typeof cb === 'function') {
+        cb({ id: id, name: name, type: type, size: size });
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AI TOOLS HUB
+// ═══════════════════════════════════════════════════════════════════════════════
+async function openAIToolsHub() {
+    await aiLoadAllFiles();
+    openModal('aiToolsHubModal');
+}
+function closeAIToolsHub() { closeModal('aiToolsHubModal'); }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  1. CONVERT TO PDF
+// ═══════════════════════════════════════════════════════════════════════════════
+async function openConvertModal() {
+    closeAIToolsHub();
+    await aiLoadAllFiles();
+    await aiLoadFolderOptions('convertTargetFolder');
+    document.getElementById('convertFileId').value = '';
+    document.getElementById('convertSelectedFile').style.display = 'none';
+    document.getElementById('convertFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('convertResult').style.display = 'none';
+    aiSetBtnLoading('convertBtn', false, 'Convert to PDF', 'magic');
+    openModal('convertModal');
+}
+function closeConvertModal() { closeModal('convertModal'); }
+
+function clearConvertFile() {
+    document.getElementById('convertFileId').value = '';
+    document.getElementById('convertSelectedFile').style.display = 'none';
+    document.getElementById('convertFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('convertResult').style.display = 'none';
+    const thumbEl = document.getElementById('convertSelectedThumb');
+    if (thumbEl) thumbEl.innerHTML = '<i class="fas fa-file" id="convertSelectedIcon"></i>';
+    const metaEl = document.getElementById('convertSelectedMeta');
+    if (metaEl) metaEl.textContent = '-';
+}
+
+async function doConvert() {
+    const fileId   = document.getElementById('convertFileId').value;
+    const folderId = document.getElementById('convertTargetFolder').value;
+    if (!fileId) { aiShowResult('convertResult','error','<i class="fas fa-exclamation-circle"></i> Please select a file first.'); return; }
+    aiSetBtnLoading('convertBtn', true);
+    aiShowResult('convertResult','loading','<i class="fas fa-circle-notch fa-spin"></i> Converting… this may take a few seconds.');
+    try {
+        const resp = await fetch('/api/ai/convert', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId, targetFolderId: folderId || null })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            aiShowResult('convertResult','success','<i class="fas fa-check-circle"></i> ' + data.message);
+            pdToast('success','Conversion Complete', data.message);
+            if (typeof loadFiles === 'function') await loadFiles();
+        } else {
+            aiShowResult('convertResult','error','<i class="fas fa-times-circle"></i> ' + (data.error || 'Conversion failed.'));
+        }
+    } catch(e) {
+        aiShowResult('convertResult','error','<i class="fas fa-times-circle"></i> Network error. Please try again.');
+    }
+    aiSetBtnLoading('convertBtn', false, 'Convert to PDF', 'magic');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  2. AI IMAGE EDITOR
+// ═══════════════════════════════════════════════════════════════════════════════
+async function openAIImageEditorModal() {
+    closeAIToolsHub();
+    await aiLoadAllFiles();
+    await aiLoadFolderOptions('imageEditTargetFolder');
+    document.getElementById('imageEditFileId').value = '';
+    document.getElementById('imageEditSelectedFile').style.display = 'none';
+    document.getElementById('imageEditFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('imageEditPreview').style.display = 'none';
+    document.getElementById('imageEditPrompt').value = '';
+    document.getElementById('imageEditResult').style.display = 'none';
+    aiSetBtnLoading('imageEditBtn', false, 'Apply AI Edit', 'magic');
+    openModal('aiImageEditorModal');
+}
+function closeAIImageEditorModal() { closeModal('aiImageEditorModal'); }
+
+function clearImageEditFile() {
+    document.getElementById('imageEditFileId').value = '';
+    document.getElementById('imageEditSelectedFile').style.display = 'none';
+    document.getElementById('imageEditFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('imageEditPreview').style.display = 'none';
+    document.getElementById('imageEditResult').style.display = 'none';
+    const thumbEl = document.getElementById('imageEditSelectedThumb');
+    if (thumbEl) thumbEl.innerHTML = '<i class="fas fa-image" style="color:#8b5cf6;"></i>';
+    const metaEl = document.getElementById('imageEditSelectedMeta');
+    if (metaEl) metaEl.textContent = '-';
+}
+
+async function doAIImageEdit() {
+    const fileId   = document.getElementById('imageEditFileId').value;
+    const prompt   = document.getElementById('imageEditPrompt').value.trim();
+    const folderId = document.getElementById('imageEditTargetFolder').value;
+    if (!fileId) { aiShowResult('imageEditResult','error','<i class="fas fa-exclamation-circle"></i> Please select an image.'); return; }
+    if (!prompt) { aiShowResult('imageEditResult','error','<i class="fas fa-exclamation-circle"></i> Please enter an edit prompt.'); return; }
+    aiSetBtnLoading('imageEditBtn', true);
+    aiShowResult('imageEditResult','loading','<i class="fas fa-circle-notch fa-spin"></i> Sending to Gemini AI… this may take 10-30 seconds.');
+    try {
+        const resp = await fetch('/api/ai/image-edit', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId, prompt, targetFolderId: folderId || null })
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+            aiShowResult('imageEditResult','error','<i class="fas fa-times-circle"></i> ' + (data.error || 'Edit failed.'));
+        } else {
+            let resultHtml = '<div style="display:flex;flex-direction:column;gap:8px;">'
+                           + '<div><i class="fas fa-check-circle" style="color:#10b981;"></i> <strong>' + escapeHtml(data.message) + '</strong></div>';
+            if (data.description) {
+                resultHtml += '<div style="font-size:0.85rem;color:var(--text-2);">' + escapeHtml(data.description) + '</div>';
+            }
+            if (data.file && data.file.id) {
+                resultHtml += '<div style="margin-top:6px;border-radius:8px;overflow:hidden;max-height:160px;text-align:center;background:rgba(0,0,0,0.06);border:1px solid var(--border);padding:4px;">'
+                            + '<img src="/api/files/preview/' + data.file.id + '" alt="Edited Preview" style="max-height:150px;max-width:100%;object-fit:contain;border-radius:6px;">'
+                            + '</div>';
+            }
+            resultHtml += '</div>';
+            aiShowResult('imageEditResult','success', resultHtml);
+            pdToast('success','AI Edit Complete', data.message);
+            if (typeof loadFiles === 'function') await loadFiles();
+        }
+    } catch(e) {
+        aiShowResult('imageEditResult','error','<i class="fas fa-times-circle"></i> Network error. Please try again.');
+    }
+    aiSetBtnLoading('imageEditBtn', false, 'Apply AI Edit', 'magic');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  4. OCR — EXTRACT TEXT
+// ═══════════════════════════════════════════════════════════════════════════════
+async function openOCRModal() {
+    closeAIToolsHub();
+    await aiLoadAllFiles();
+    document.getElementById('ocrFileId').value = '';
+    document.getElementById('ocrSelectedFile').style.display = 'none';
+    document.getElementById('ocrFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('ocrTextResult').style.display = 'none';
+    document.getElementById('ocrResultMsg').style.display = 'none';
+    document.getElementById('ocrTextArea').value = '';
+    _ocrCurrentFileId = null;
+    _ocrExtractedText = '';
+    aiSetBtnLoading('ocrBtn', false, 'Extract Text', 'font');
+    openModal('ocrModal');
+}
+function closeOCRModal() { closeModal('ocrModal'); }
+
+function clearOCRFile() {
+    document.getElementById('ocrFileId').value = '';
+    document.getElementById('ocrSelectedFile').style.display = 'none';
+    document.getElementById('ocrFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('ocrTextResult').style.display = 'none';
+    document.getElementById('ocrResultMsg').style.display = 'none';
+    const thumbEl = document.getElementById('ocrSelectedThumb');
+    if (thumbEl) thumbEl.innerHTML = '<i class="fas fa-file-image" id="ocrSelectedIcon" style="color:#3b82f6;"></i>';
+    const metaEl = document.getElementById('ocrSelectedMeta');
+    if (metaEl) metaEl.textContent = '-';
+}
+
+async function doOCR() {
+    const fileId = document.getElementById('ocrFileId').value;
+    if (!fileId) { aiShowResult('ocrResultMsg','error','<i class="fas fa-exclamation-circle"></i> Please select a file.'); return; }
+    aiSetBtnLoading('ocrBtn', true);
+    aiShowResult('ocrResultMsg','loading','<i class="fas fa-circle-notch fa-spin"></i> Extracting text… this may take 15-30 seconds for images.');
+    document.getElementById('ocrTextResult').style.display = 'none';
+    try {
+        const resp = await fetch('/api/ai/ocr', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId, saveToDrive: false })
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+            aiShowResult('ocrResultMsg','error','<i class="fas fa-times-circle"></i> ' + (data.error || 'OCR failed.'));
+        } else if (!data.text) {
+            aiShowResult('ocrResultMsg','info','<i class="fas fa-info-circle"></i> No text found in this file.');
+        } else {
+            _ocrCurrentFileId = fileId;
+            _ocrExtractedText = data.text;
+            document.getElementById('ocrTextArea').value = data.text;
+            document.getElementById('ocrWordCount').textContent = '— ' + (data.wordCount||0) + ' words, ' + (data.charCount||0) + ' chars';
+            document.getElementById('ocrTextResult').style.display = 'block';
+            aiShowResult('ocrResultMsg','success','<i class="fas fa-check-circle"></i> Text extracted successfully.');
+            pdToast('success','OCR Complete','Extracted ' + (data.wordCount||0) + ' words from the file.');
+        }
+    } catch(e) {
+        aiShowResult('ocrResultMsg','error','<i class="fas fa-times-circle"></i> Network error. Please try again.');
+    }
+    aiSetBtnLoading('ocrBtn', false, 'Extract Text', 'font');
+}
+
+function copyOCRText() {
+    const text = document.getElementById('ocrTextArea').value;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(function() { pdToast('success','Copied','OCR text copied to clipboard.'); });
+}
+
+async function saveOCRText() {
+    if (!_ocrCurrentFileId || !_ocrExtractedText) return;
+    const btn = document.getElementById('ocrSaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving…';
+    try {
+        const resp = await fetch('/api/ai/ocr', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId: _ocrCurrentFileId, saveToDrive: true })
+        });
+        const data = await resp.json();
+        if (data.success && data.savedFile) {
+            pdToast('success','Saved','"' + data.savedFile.name + '" saved to Drive.');
+            aiShowResult('ocrResultMsg','success','<i class="fas fa-save"></i> Saved as "' + data.savedFile.name + '" in your Drive.');
+            if (typeof loadFiles === 'function') await loadFiles();
+        } else {
+            pdToast('error','Error', data.error || 'Failed to save.');
+        }
+    } catch(e) { pdToast('error','Error','Network error.'); }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save"></i> Save as .txt to Drive';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  5. DOCUMENT SUMMARY
+// ═══════════════════════════════════════════════════════════════════════════════
+async function openSummaryModal() {
+    closeAIToolsHub();
+    await aiLoadAllFiles();
+    document.getElementById('summaryFileId').value = '';
+    document.getElementById('summarySelectedFile').style.display = 'none';
+    document.getElementById('summaryFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('summaryTextResult').style.display = 'none';
+    document.getElementById('summaryResultMsg').style.display = 'none';
+    document.getElementById('summaryTextArea').innerHTML = '';
+    _summaryCurrentFileId = null;
+    _summaryText = '';
+    aiSetBtnLoading('summaryBtn', false, 'Summarize Document', 'align-left');
+    openModal('summaryModal');
+}
+function closeSummaryModal() { closeModal('summaryModal'); }
+
+function clearSummaryFile() {
+    document.getElementById('summaryFileId').value = '';
+    document.getElementById('summarySelectedFile').style.display = 'none';
+    document.getElementById('summaryFilePickerPlaceholder').style.display = 'flex';
+    document.getElementById('summaryTextResult').style.display = 'none';
+    document.getElementById('summaryResultMsg').style.display = 'none';
+    const thumbEl = document.getElementById('summarySelectedThumb');
+    if (thumbEl) thumbEl.innerHTML = '<i class="fas fa-file-alt" id="summarySelectedIcon" style="color:#f59e0b;"></i>';
+    const metaEl = document.getElementById('summarySelectedMeta');
+    if (metaEl) metaEl.textContent = '-';
+}
+
+async function doSummarize() {
+    const fileId = document.getElementById('summaryFileId').value;
+    if (!fileId) { aiShowResult('summaryResultMsg','error','<i class="fas fa-exclamation-circle"></i> Please select a PDF or DOCX file.'); return; }
+    aiSetBtnLoading('summaryBtn', true);
+    aiShowResult('summaryResultMsg','loading','<i class="fas fa-circle-notch fa-spin"></i> Reading document and generating AI summary…');
+    document.getElementById('summaryTextResult').style.display = 'none';
+    try {
+        const resp = await fetch('/api/ai/summarize', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId, saveToDrive: false })
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+            aiShowResult('summaryResultMsg','error','<i class="fas fa-times-circle"></i> ' + (data.error || 'Summarization failed.'));
+        } else {
+            _summaryCurrentFileId = fileId;
+            _summaryText = data.summary;
+            const rendered = (data.summary||'')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+            document.getElementById('summaryTextArea').innerHTML = rendered;
+            document.getElementById('summaryTextResult').style.display = 'block';
+            aiShowResult('summaryResultMsg','success','<i class="fas fa-check-circle"></i> Summary generated successfully.');
+            pdToast('success','Summary Ready','AI summary has been generated.');
+        }
+    } catch(e) {
+        aiShowResult('summaryResultMsg','error','<i class="fas fa-times-circle"></i> Network error. Please try again.');
+    }
+    aiSetBtnLoading('summaryBtn', false, 'Summarize Document', 'align-left');
+}
+
+function copySummaryText() {
+    if (!_summaryText) return;
+    navigator.clipboard.writeText(_summaryText).then(function() { pdToast('success','Copied','Summary copied to clipboard.'); });
+}
+
+async function saveSummaryText() {
+    if (!_summaryCurrentFileId || !_summaryText) return;
+    const btn = document.getElementById('summarySaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving…';
+    try {
+        const resp = await fetch('/api/ai/summarize', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId: _summaryCurrentFileId, saveToDrive: true })
+        });
+        const data = await resp.json();
+        if (data.success && data.savedFile) {
+            pdToast('success','Saved','"' + data.savedFile.name + '" saved to Drive.');
+            aiShowResult('summaryResultMsg','success','<i class="fas fa-save"></i> Summary saved as "' + data.savedFile.name + '" in your Drive.');
+            if (typeof loadFiles === 'function') await loadFiles();
+        } else {
+            pdToast('error','Error', data.error || 'Failed to save.');
+        }
+    } catch(e) { pdToast('error','Error','Network error.'); }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save"></i> Save as .txt to Drive';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  QUICK LAUNCH from file cards (right-click or action buttons)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function quickConvert(fileId, fileName, fileMime) {
+    await aiLoadAllFiles();
+    await aiLoadFolderOptions('convertTargetFolder');
+    document.getElementById('convertFileId').value = fileId;
+    document.getElementById('convertSelectedName').textContent = fileName;
+    var ic = aiFileIcon(fileMime, fileName);
+    document.getElementById('convertSelectedIcon').className = 'fas ' + ic.icon;
+    document.getElementById('convertSelectedIcon').style.color = ic.color;
+    document.getElementById('convertSelectedFile').style.display = 'flex';
+    document.getElementById('convertFilePickerPlaceholder').style.display = 'none';
+    document.getElementById('convertResult').style.display = 'none';
+    aiSetBtnLoading('convertBtn', false, 'Convert to PDF', 'magic');
+    openModal('convertModal');
+}
+
+async function quickAIImageEdit(fileId, fileName) {
+    await aiLoadAllFiles();
+    await aiLoadFolderOptions('imageEditTargetFolder');
+    document.getElementById('imageEditFileId').value = fileId;
+    document.getElementById('imageEditSelectedName').textContent = fileName;
+    document.getElementById('imageEditSelectedFile').style.display = 'flex';
+    document.getElementById('imageEditFilePickerPlaceholder').style.display = 'none';
+    document.getElementById('imageEditPreviewImg').src = '/api/files/preview/' + fileId;
+    document.getElementById('imageEditPreview').style.display = 'block';
+    document.getElementById('imageEditPrompt').value = '';
+    document.getElementById('imageEditResult').style.display = 'none';
+    aiSetBtnLoading('imageEditBtn', false, 'Apply AI Edit', 'magic');
+    openModal('aiImageEditorModal');
+}
+
+async function quickOCR(fileId, fileName) {
+    await aiLoadAllFiles();
+    document.getElementById('ocrFileId').value = fileId;
+    document.getElementById('ocrSelectedName').textContent = fileName;
+    document.getElementById('ocrSelectedFile').style.display = 'flex';
+    document.getElementById('ocrFilePickerPlaceholder').style.display = 'none';
+    document.getElementById('ocrTextResult').style.display = 'none';
+    document.getElementById('ocrResultMsg').style.display = 'none';
+    _ocrCurrentFileId = fileId;
+    _ocrExtractedText = '';
+    aiSetBtnLoading('ocrBtn', false, 'Extract Text', 'font');
+    openModal('ocrModal');
+}
+
+async function quickSummarize(fileId, fileName) {
+    await aiLoadAllFiles();
+    document.getElementById('summaryFileId').value = fileId;
+    document.getElementById('summarySelectedName').textContent = fileName;
+    document.getElementById('summarySelectedFile').style.display = 'flex';
+    document.getElementById('summaryFilePickerPlaceholder').style.display = 'none';
+    document.getElementById('summaryTextResult').style.display = 'none';
+    document.getElementById('summaryResultMsg').style.display = 'none';
+    _summaryCurrentFileId = fileId;
+    _summaryText = '';
+    aiSetBtnLoading('summaryBtn', false, 'Summarize Document', 'align-left');
+    openModal('summaryModal');
+}
+
