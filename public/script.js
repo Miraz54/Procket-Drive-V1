@@ -668,7 +668,7 @@ function getFileIcon(mimeType, fileId, fileName) {
     if (!mimeType) mimeType = '';
     const ext = (fileName || '').split('.').pop().toLowerCase();
     if (mimeType.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext)) {
-        return `<img src="/api/files/preview/${fileId}?thumb=1" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;" onerror="this.parentElement.innerHTML='<i class=\\'fas fa-file-image\\' style=\\'font-size:32px;color:#10b981\\'></i>'">`;
+        return `<img src="/thumbs/${fileId}.webp" onerror="this.onerror=null;this.src='/api/files/preview/${fileId}?thumb=1'" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;">`;
     }
     if (mimeType.includes('pdf') || ext === 'pdf') {
         return `<i class="fas fa-file-pdf" style="font-size:32px;color:#ef4444;"></i>`;
@@ -1956,18 +1956,6 @@ function showMessage(id, msg, type) {
     setTimeout(() => { if (el.innerHTML === msg) el.innerHTML = ''; }, 5000);
 }
 
-// Particles
-function createParticle() {
-    const bg = document.querySelector('.bg-animation'); if (!bg) return;
-    const p  = document.createElement('div');
-    p.className = 'particle';
-    const s = Math.random() * 5 + 2;
-    p.style.cssText = `width:${s}px;height:${s}px;left:${Math.random()*100}%;animation-duration:${Math.random()*10+10}s;animation-delay:${Math.random()*4}s;opacity:${Math.random()*0.4+0.1};background:rgba(108,99,255,${Math.random()*0.4+0.1});border-radius:50%;position:absolute;animation-name:particleFloat;animation-timing-function:linear;animation-iteration-count:infinite;`;
-    bg.appendChild(p);
-    setTimeout(() => p.remove(), 20000);
-}
-setInterval(() => { if (Math.random() > 0.5) createParticle(); }, 3000);
-
 // Confirmation dialog
 function showConfirmDialog(title, message, isDanger = true) {
     return new Promise((resolve) => {
@@ -2588,8 +2576,15 @@ async function aiLoadFolderOptions(selectId) {
 
 // ── Fetch all user files for AI file picker ───────────────────────────────────
 async function aiLoadAllFiles() {
+    if (Array.isArray(allFiles) && allFiles.length > 0) {
+        _aiAllFiles = allFiles;
+        return;
+    }
+    if (Array.isArray(_aiAllFiles) && _aiAllFiles.length > 0) {
+        return;
+    }
     try {
-        const resp = await fetch('/api/files/list?all=true&t=' + Date.now(), { credentials: 'include' });
+        const resp = await fetch('/api/files/list?all=true', { credentials: 'include' });
         if (resp.ok) {
             const data = await resp.json();
             if (Array.isArray(data)) _aiAllFiles = data;
@@ -2870,7 +2865,7 @@ function renderAIFilePicker(query) {
 
         let previewHtml;
         if (isImg) {
-            previewHtml = `<img src="/api/files/preview/${f.id}?thumb=1" alt="${escapeHtml(f.name || '')}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+            previewHtml = `<img src="/thumbs/${f.id}.webp" onerror="this.onerror=null;this.src='/api/files/preview/${f.id}?thumb=1'" alt="${escapeHtml(f.name || '')}" loading="lazy" decoding="async">`
                         + `<div class="ai-picker-card-icon-wrap" style="display:none;"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
         } else {
             previewHtml = `<div class="ai-picker-card-icon-wrap"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;

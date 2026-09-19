@@ -386,6 +386,21 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
         })();
     }
 
+    // Generate disk thumbnail for image in background (fast, non-blocking)
+    if (req.file.mimetype && req.file.mimetype.startsWith('image/')) {
+        const thumbDir = path.join(__dirname, '..', 'public', 'thumbs');
+        const thumbPath = path.join(thumbDir, `${inserted[0].id}.webp`);
+        (async () => {
+            try {
+                if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true });
+                const sharp = require('sharp');
+                await sharp(req.file.buffer).resize(96, 96, { fit: 'cover' }).webp({ quality: 75 }).toFile(thumbPath);
+            } catch(e) {
+                console.warn('[upload/thumb] Failed to generate thumbnail:', e.message);
+            }
+        })();
+    }
+
     invalidateUserCaches(userId, inserted[0].id);
 
     res.json({
@@ -488,6 +503,12 @@ router.delete('/permanent/:id', requireAuth, async (req, res) => {
     const { error: deleteError } = await supabaseAdmin.from('files').delete().eq('id', req.params.id);
     if (deleteError) return res.status(500).json({ error: 'Delete failed' });
 
+    // Remove disk thumbnail if exists
+    const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${req.params.id}.webp`);
+    if (fs.existsSync(diskThumb)) {
+        try { fs.unlinkSync(diskThumb); } catch(e) {}
+    }
+
     invalidateUserCaches(userId, req.params.id);
     res.json({ success: true });
 });
@@ -497,13 +518,22 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
     const fileId = req.params.id;
     const isThumb = (req.query.thumb === '1' || req.query.thumb === 'true');
 
-    // Return instant cached thumbnail if available
-    if (isThumb && thumbCache.has(fileId)) {
-        const cached = thumbCache.get(fileId);
-        res.setHeader('Content-Type', cached.mimeType);
-        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-        res.setHeader('Content-Disposition', 'inline');
-        return res.send(cached.buffer);
+    // Return instant disk thumbnail if available
+    if (isThumb) {
+        const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${fileId}.webp`);
+        if (fs.existsSync(diskThumb)) {
+            res.setHeader('Content-Type', 'image/webp');
+            res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+            res.setHeader('Content-Disposition', 'inline');
+            return res.sendFile(diskThumb);
+        }
+        if (thumbCache.has(fileId)) {
+            const cached = thumbCache.get(fileId);
+            res.setHeader('Content-Type', cached.mimeType);
+            res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+            res.setHeader('Content-Disposition', 'inline');
+            return res.send(cached.buffer);
+        }
     }
 
     const { data: file, error } = await supabaseAdmin.from('files')
@@ -529,7 +559,7 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
     if (downloadError) return res.status(500).json({ error: 'Download failed' });
     const buffer = Buffer.from(await data.arrayBuffer());
 
-    // If thumbnail requested and it's an image, generate and cache compact WebP thumbnail
+    // If thumbnail requested and it's an image, generate, cache in memory and save to disk
     if (isThumb && file.mime_type && file.mime_type.startsWith('image/')) {
         try {
             const sharp = require('sharp');
@@ -537,6 +567,10 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
                 .resize(96, 96, { fit: 'cover', position: 'centre' })
                 .webp({ quality: 80 })
                 .toBuffer();
+
+            // Save to disk asynchronously
+            const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${fileId}.webp`);
+            fs.writeFile(diskThumb, thumbBuf, () => {});
 
             if (thumbCache.size >= MAX_THUMB_CACHE) {
                 const firstKey = thumbCache.keys().next().value;
