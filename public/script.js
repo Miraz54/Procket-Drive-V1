@@ -2684,7 +2684,7 @@ function attachAIPickerEvents() {
                 document.getElementById('ocrTextResult').style.display = 'none';
                 document.getElementById('ocrResultMsg').style.display = 'none';
                 _ocrCurrentFileId = file.id;
-            }, null);
+            }, 'ocr');
         });
     }
 
@@ -2724,10 +2724,33 @@ async function openAIFilePicker(callback, filterType) {
     _aiPickerFilter   = filterType || null;
     _aiPickerCategory = 'all';
 
-    // Reset tabs
-    document.querySelectorAll('.ai-picker-tab-btn').forEach(btn => btn.classList.remove('active'));
+    // Reset tabs: display all by default
+    document.querySelectorAll('.ai-picker-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.display = 'inline-flex';
+    });
     const allTab = document.getElementById('tab-all');
     if (allTab) allTab.classList.add('active');
+
+    // Context-sensitive tabs per tool
+    const tabImage = document.getElementById('tab-image');
+    const tabPdf   = document.getElementById('tab-pdf');
+    const tabDocx  = document.getElementById('tab-docx');
+
+    if (_aiPickerFilter === 'convertable') {
+        // Converting TO PDF: You cannot convert an existing PDF to PDF, so remove the PDFs tab!
+        if (tabPdf) tabPdf.style.display = 'none';
+    } else if (_aiPickerFilter === 'image') {
+        // Image editing: only images
+        if (tabPdf) tabPdf.style.display = 'none';
+        if (tabDocx) tabDocx.style.display = 'none';
+    } else if (_aiPickerFilter === 'pdfdocx') {
+        // Document summarizer: text documents (PDF, DOCX)
+        if (tabImage) tabImage.style.display = 'none';
+    } else if (_aiPickerFilter === 'ocr') {
+        // OCR: scanned images & PDFs
+        if (tabDocx) tabDocx.style.display = 'none';
+    }
 
     openModal('aiFilePickerModal');
     const searchInput = document.getElementById('aiFilePickerSearch');
@@ -2795,12 +2818,24 @@ function renderAIFilePicker(query) {
             )
         );
     } else if (_aiPickerFilter === 'convertable') {
+        // Exclude PDFs strictly: only images and Word docs can be converted to PDF
+        files = files.filter(f =>
+            f.type !== 'application/pdf' &&
+            !(f.name||'').toLowerCase().endsWith('.pdf') && (
+                (f.type||'').startsWith('image/') ||
+                /\.(jpe?g|png|webp|bmp)$/i.test(f.name||'') ||
+                (f.name||'').toLowerCase().endsWith('.docx') ||
+                (f.name||'').toLowerCase().endsWith('.doc') ||
+                f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
+        );
+    } else if (_aiPickerFilter === 'ocr') {
+        // OCR works on images and PDFs
         files = files.filter(f =>
             (f.type||'').startsWith('image/') ||
-            /\.(jpe?g|png|webp|bmp)$/i.test(f.name||'') ||
-            (f.name||'').toLowerCase().endsWith('.docx') ||
-            (f.name||'').toLowerCase().endsWith('.doc') ||
-            f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name||'') ||
+            f.type === 'application/pdf' ||
+            (f.name||'').toLowerCase().endsWith('.pdf')
         );
     }
 
@@ -2910,6 +2945,11 @@ async function doConvert() {
     const fileId   = document.getElementById('convertFileId').value;
     const folderId = document.getElementById('convertTargetFolder').value;
     if (!fileId) { aiShowResult('convertResult','error','<i class="fas fa-exclamation-circle"></i> Please select a file first.'); return; }
+    const selName = (document.getElementById('convertSelectedName').textContent || '').toLowerCase();
+    if (selName.endsWith('.pdf')) {
+        aiShowResult('convertResult', 'error', '<i class="fas fa-exclamation-circle"></i> This file is already a PDF! Please select an image or Word (DOCX) document.');
+        return;
+    }
     aiSetBtnLoading('convertBtn', true);
     aiShowResult('convertResult','loading','<i class="fas fa-circle-notch fa-spin"></i> Converting… this may take a few seconds.');
     try {
