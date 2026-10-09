@@ -511,24 +511,34 @@ function proceedUpload(file, input) {
     if (progressPct)      progressPct.textContent    = '0%';
     if (progressFilename) progressFilename.textContent = file.name;
 
+    let processingTimer = null;
+
     xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
             const pct = Math.round((e.loaded / e.total) * 100);
             if (progressBar) progressBar.style.width = pct + '%';
             if (progressPct) progressPct.textContent  = pct + '%';
 
-            // When upload finishes sending, switch to "Processing..." state
+            // When upload finishes sending, switch to active cloud processing state
             if (pct >= 100) {
-                if (progressPct) progressPct.textContent = 'Processing...';
+                if (progressPct) progressPct.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving to cloud…';
                 if (progressBar) {
                     progressBar.style.width = '100%';
                     progressBar.classList.add('upload-processing');
+                }
+                if (!processingTimer) {
+                    processingTimer = setTimeout(() => {
+                        if (progressPct && progressBar && progressBar.classList.contains('upload-processing')) {
+                            progressPct.innerHTML = '<i class="fas fa-cloud-upload-alt fa-fade"></i> Finalizing storage…';
+                        }
+                    }, 3500);
                 }
             }
         }
     });
 
     xhr.onload = () => {
+        if (processingTimer) clearTimeout(processingTimer);
         // Hide and reset progress bar
         if (progressBar) progressBar.classList.remove('upload-processing');
         if (progressWrap) {
@@ -573,11 +583,19 @@ function proceedUpload(file, input) {
         }
     };
     xhr.onerror = () => {
+        if (processingTimer) clearTimeout(processingTimer);
         if (progressBar) progressBar.classList.remove('upload-processing');
         if (progressWrap) progressWrap.style.display = 'none';
         showToast('Upload failed. Network error.', 'error');
     };
+    xhr.ontimeout = () => {
+        if (processingTimer) clearTimeout(processingTimer);
+        if (progressBar) progressBar.classList.remove('upload-processing');
+        if (progressWrap) progressWrap.style.display = 'none';
+        showToast('Upload timed out. Please check your internet connection.', 'error');
+    };
 
+    xhr.timeout = 180000;
     xhr.open('POST', '/api/files/upload', true);
     xhr.send(formData);
     if (input) input.value = '';

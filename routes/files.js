@@ -326,12 +326,8 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
 
     const safeName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = `${storageOwnerId}/${safeName}`;
-    const { error: uploadError } = await supabaseAdmin.storage.from('userfiles').upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
-    if (uploadError) {
-        console.error('[upload] Storage error:', uploadError);
-        return res.status(500).json({ error: 'Upload failed: ' + uploadError.message });
-    }
-    // Check for duplicate file name in this folder
+
+    // Run Supabase Storage upload and duplicate check in parallel for maximum speed
     let dupQuery = supabaseAdmin.from('files').select('id')
         .eq('user_id', userId)
         .eq('original_name', req.file.originalname)
@@ -341,7 +337,18 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
     } else {
         dupQuery = dupQuery.is('folder_id', null);
     }
-    const { data: existingDups } = await dupQuery;
+
+    const [uploadRes, dupRes] = await Promise.all([
+        supabaseAdmin.storage.from('userfiles').upload(filePath, req.file.buffer, { contentType: req.file.mimetype }),
+        dupQuery
+    ]);
+
+    if (uploadRes.error) {
+        console.error('[upload] Storage error:', uploadRes.error);
+        return res.status(500).json({ error: 'Upload failed: ' + uploadRes.error.message });
+    }
+
+    const existingDups = dupRes.data;
     const isDuplicate = Boolean(existingDups && existingDups.length > 0);
 
     const { data: urlData } = supabaseAdmin.storage.from('userfiles').getPublicUrl(filePath);
