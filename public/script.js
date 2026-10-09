@@ -3427,6 +3427,7 @@ async function doAIImageEdit() {
             setNeuralProgress(30, 'হাই-প্রিসিশন নিউরাল সেগমেন্টেশন ও হেয়ার-ম্যাটিং শুরু হচ্ছে…');
 
             const cutoutBlob = await removeBackground(sourceBlob, {
+                publicPath: 'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/',
                 progress: (key, current, total) => {
                     if (total > 0) {
                         const pct = Math.min(100, Math.round((current / total) * 100));

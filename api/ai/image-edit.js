@@ -88,27 +88,30 @@ async function removeBackgroundSmart(inputBuffer, options = {}) {
         return false;
     };
 
-    // Subject core bounding box: NEVER allow background flood fill to invade the subject's central core
-    const coreXMin = Math.floor(width * 0.25);
-    const coreXMax = Math.floor(width * 0.75);
-    const coreYMin = Math.floor(height * 0.30);
-    const coreYMax = Math.floor(height * 0.85);
+    // Subject core bounding box: protect subject head, body and torso from flood-fill
+    const coreXMin = Math.floor(width * 0.20);
+    const coreXMax = Math.floor(width * 0.80);
+    const coreYMin = Math.floor(height * 0.05); // Protects human head from y=0.05 downwards
+    const coreYMax = Math.floor(height * 0.92);
 
     const visited = new Uint8Array(width * height);
     const queue = new Int32Array(width * height);
     let head = 0;
     let tail = 0;
 
-    // Seed ONLY from the top border and upper corners
-    for (let x = 0; x < width; x++) {
-        const pTop = getPixel(x, 0);
-        if (isBgColor(pTop[0], pTop[1], pTop[2])) {
-            visited[x] = 1;
-            queue[tail++] = x;
-        }
+    // Seed ONLY from top corners (avoid top center where hair/head is)
+    const cornerLimitX = Math.floor(width * 0.20);
+    for (let x = 0; x < cornerLimitX; x++) {
+        // top-left
+        const pTL = getPixel(x, 0);
+        if (isBgColor(pTL[0], pTL[1], pTL[2])) { visited[x] = 1; queue[tail++] = x; }
+        // top-right
+        const xr = width - 1 - x;
+        const pTR = getPixel(xr, 0);
+        if (isBgColor(pTR[0], pTR[1], pTR[2])) { visited[xr] = 1; queue[tail++] = xr; }
     }
 
-    const seedHeight = Math.floor(height * 0.35);
+    const seedHeight = Math.floor(height * 0.40);
     for (let y = 1; y < seedHeight; y++) {
         const idxLeft = y * width;
         const pLeft = getPixel(0, y);

@@ -29,6 +29,9 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Cookie');
+    res.header('Cross-Origin-Opener-Policy', 'same-origin');
+    res.header('Cross-Origin-Embedder-Policy', 'credentialless');
+    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });
