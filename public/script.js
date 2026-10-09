@@ -496,9 +496,16 @@ async function uploadFile(input) {
 function proceedUpload(file, input) {
     const formData = new FormData();
     formData.append('file', file);
-    // Use shared folder context if viewing a shared folder, otherwise use current folder
-    const targetFolderId = sharedFolderId || currentFolderId;
-    if (targetFolderId) formData.append('folder_id', targetFolderId);
+
+    // Only send folder_id if user is currently inside an actual folder or shared folder
+    const isSharedView = window.location.pathname.includes('/shared-folder/') || activeNav === 'shared';
+    if (!isSharedView) {
+        sharedFolderId = null; // Clean up so it never leaks into My Drive
+    }
+    const targetFolderId = isSharedView ? (sharedFolderId || currentFolderId) : currentFolderId;
+    if (targetFolderId && targetFolderId !== 'null' && targetFolderId !== 'undefined') {
+        formData.append('folder_id', targetFolderId);
+    }
 
     const xhr              = new XMLHttpRequest();
     const progressWrap     = document.getElementById('uploadProgressContainer');
@@ -507,7 +514,7 @@ function proceedUpload(file, input) {
     const progressFilename = document.getElementById('progressFilename');
 
     if (progressWrap)     progressWrap.style.display = 'block';
-    if (progressBar)      { progressBar.style.width = '0%'; progressBar.style.transition = 'width 0.3s ease'; progressBar.classList.remove('upload-processing'); }
+    if (progressBar)      { progressBar.style.width = '0%'; progressBar.style.transition = 'width 0.25s ease'; progressBar.classList.remove('upload-processing'); }
     if (progressPct)      progressPct.textContent    = '0%';
     if (progressFilename) progressFilename.textContent = file.name;
 
@@ -515,23 +522,29 @@ function proceedUpload(file, input) {
 
     xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 100);
-            if (progressBar) progressBar.style.width = pct + '%';
-            if (progressPct) progressPct.textContent  = pct + '%';
+            // Reserve 0-85% for raw network transfer, 85-99% for cloud processing, 100% only on complete
+            const rawPct = Math.round((e.loaded / e.total) * 100);
+            const displayPct = Math.min(85, Math.round((e.loaded / e.total) * 85));
 
-            // When upload finishes sending, switch to active cloud processing state
-            if (pct >= 100) {
-                if (progressPct) progressPct.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Saving to cloud…';
+            if (rawPct < 100) {
+                if (progressBar) progressBar.style.width = displayPct + '%';
+                if (progressPct) progressPct.textContent  = displayPct + '%';
+            } else {
+                // Network send complete -> Server & Supabase storage transfer
                 if (progressBar) {
-                    progressBar.style.width = '100%';
+                    progressBar.style.width = '90%';
                     progressBar.classList.add('upload-processing');
+                }
+                if (progressPct) {
+                    progressPct.innerHTML = '<i class="fas fa-cloud-upload-alt fa-fade"></i> Cloud saving…';
                 }
                 if (!processingTimer) {
                     processingTimer = setTimeout(() => {
-                        if (progressPct && progressBar && progressBar.classList.contains('upload-processing')) {
-                            progressPct.innerHTML = '<i class="fas fa-cloud-upload-alt fa-fade"></i> Finalizing storage…';
+                        if (progressBar && progressBar.classList.contains('upload-processing')) {
+                            progressBar.style.width = '96%';
+                            if (progressPct) progressPct.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finalizing…';
                         }
-                    }, 3500);
+                    }, 2500);
                 }
             }
         }
@@ -539,8 +552,12 @@ function proceedUpload(file, input) {
 
     xhr.onload = () => {
         if (processingTimer) clearTimeout(processingTimer);
-        // Hide and reset progress bar
-        if (progressBar) progressBar.classList.remove('upload-processing');
+        // Set to 100% on complete
+        if (progressBar) {
+            progressBar.style.width = '100%';
+            progressBar.classList.remove('upload-processing');
+        }
+        if (progressPct) progressPct.textContent = '100%';
         if (progressWrap) {
             progressWrap.style.opacity = '0';
             progressWrap.style.transition = 'opacity 0.3s ease';

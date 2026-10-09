@@ -52,7 +52,7 @@ async function checkFolderAccess(userId, folderId) {
 
         if (String(folder.user_id).trim() === String(userId).trim()) return true;
 
-        const { data: user } = await supabase.from('users')
+        const { data: user } = await supabaseAdmin.from('users')
             .select('email')
             .eq('id', userId)
             .maybeSingle();
@@ -108,7 +108,7 @@ async function checkFolderUploadAccess(userId, folderId) {
 
         if (String(folder.user_id).trim() === String(userId).trim()) return true;
 
-        const { data: user } = await supabase.from('users')
+        const { data: user } = await supabaseAdmin.from('users')
             .select('email')
             .eq('id', userId)
             .maybeSingle();

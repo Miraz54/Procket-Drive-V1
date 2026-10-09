@@ -118,7 +118,7 @@ async function checkFolderAccess(userId, folderId) {
         if (String(folder.user_id).trim() === String(userId).trim()) return true;
 
         // Check shared_emails or folder_shares table
-        const { data: user } = await supabase.from('users')
+        const { data: user } = await supabaseAdmin.from('users')
             .select('email')
             .eq('id', userId)
             .maybeSingle();
@@ -183,7 +183,7 @@ async function checkFolderUploadAccess(userId, folderId) {
         }
 
         // Get user email
-        const { data: user } = await supabase.from('users')
+        const { data: user } = await supabaseAdmin.from('users')
             .select('email')
             .eq('id', userId)
             .maybeSingle();
@@ -372,9 +372,9 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
         (async () => {
             try {
                 const [{ data: ownerUser }, { data: uploaderUser }, { data: folderRow }] = await Promise.all([
-                    supabase.from('users').select('email').eq('id', folderOwnerId).maybeSingle(),
-                    supabase.from('users').select('email').eq('id', userId).maybeSingle(),
-                    supabase.from('folders').select('name, share_token').eq('id', folder_id).maybeSingle()
+                    supabaseAdmin.from('users').select('email').eq('id', folderOwnerId).maybeSingle(),
+                    supabaseAdmin.from('users').select('email').eq('id', userId).maybeSingle(),
+                    supabaseAdmin.from('folders').select('name, share_token').eq('id', folder_id).maybeSingle()
                 ]);
 
                 if (ownerUser && ownerUser.email && folderRow) {
