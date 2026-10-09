@@ -880,6 +880,17 @@ body {
     background: var(--accent); border-radius: var(--r-full);
     transition: width 0.3s;
 }
+/* Processing state — shown after 100% while server handles the file */
+.progress-bar.upload-processing {
+    background: linear-gradient(90deg, var(--accent) 25%, #a78bfa 50%, var(--accent) 75%);
+    background-size: 200% 100%;
+    animation: uploadProcessingShimmer 1.2s linear infinite;
+    transition: none;
+}
+@keyframes uploadProcessingShimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
 
 /* File Container */
 .files-section-card {

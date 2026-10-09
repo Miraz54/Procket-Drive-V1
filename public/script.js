@@ -507,7 +507,7 @@ function proceedUpload(file, input) {
     const progressFilename = document.getElementById('progressFilename');
 
     if (progressWrap)     progressWrap.style.display = 'block';
-    if (progressBar)      progressBar.style.width    = '0%';
+    if (progressBar)      { progressBar.style.width = '0%'; progressBar.style.transition = 'width 0.3s ease'; progressBar.classList.remove('upload-processing'); }
     if (progressPct)      progressPct.textContent    = '0%';
     if (progressFilename) progressFilename.textContent = file.name;
 
@@ -516,11 +516,30 @@ function proceedUpload(file, input) {
             const pct = Math.round((e.loaded / e.total) * 100);
             if (progressBar) progressBar.style.width = pct + '%';
             if (progressPct) progressPct.textContent  = pct + '%';
+
+            // When upload finishes sending, switch to "Processing..." state
+            if (pct >= 100) {
+                if (progressPct) progressPct.textContent = 'Processing...';
+                if (progressBar) {
+                    progressBar.style.width = '100%';
+                    progressBar.classList.add('upload-processing');
+                }
+            }
         }
     });
 
     xhr.onload = () => {
-        if (progressWrap) progressWrap.style.display = 'none';
+        // Hide and reset progress bar
+        if (progressBar) progressBar.classList.remove('upload-processing');
+        if (progressWrap) {
+            progressWrap.style.opacity = '0';
+            progressWrap.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => {
+                progressWrap.style.display = 'none';
+                progressWrap.style.opacity = '1';
+                progressWrap.style.transition = '';
+            }, 300);
+        }
         let response = null;
         try {
             response = JSON.parse(xhr.responseText);
@@ -554,6 +573,7 @@ function proceedUpload(file, input) {
         }
     };
     xhr.onerror = () => {
+        if (progressBar) progressBar.classList.remove('upload-processing');
         if (progressWrap) progressWrap.style.display = 'none';
         showToast('Upload failed. Network error.', 'error');
     };
