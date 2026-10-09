@@ -1727,47 +1727,89 @@ async function trashDeleteSelected() {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
     }
 
-    const deletePromises = chks.map(async (chk) => {
-        const id = String(chk.dataset.id);
-        const row = document.getElementById(`trash-row-${id}`);
-        if (row) row.style.opacity = '0.3';
+    try {
+        const ids = chks.map(c => String(c.dataset.id));
+        chks.forEach(chk => {
+            const row = document.getElementById(`trash-row-${chk.dataset.id}`);
+            if (row) row.style.opacity = '0.3';
+        });
+
+        // 1. Try fast batch endpoint with 15s timeout
+        let deletedIds = [];
         try {
-            const res = await fetch(`/api/files/permanent/${id}`, { method: 'DELETE', credentials: 'include' });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const res = await fetch('/api/files/permanent-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ ids }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
             if (res.ok) {
-                if (row) row.remove();
-                _trashFiles = _trashFiles.filter(f => String(f.id) !== id);
-                return true;
-            } else {
-                if (row) row.style.opacity = '1';
-                return false;
+                const data = await res.json();
+                deletedIds = (data.deletedIds || ids).map(String);
             }
-        } catch(e) {
-            if (row) row.style.opacity = '1';
-            return false;
+        } catch(batchErr) {
+            console.warn('[trashDeleteSelected] Batch failed, trying individual fallback:', batchErr);
         }
-    });
 
-    const results = await Promise.all(deletePromises);
-    const deletedCount = results.filter(Boolean).length;
+        // 2. Fallback to individual deletes if batch didn't succeed
+        if (deletedIds.length === 0) {
+            const deletePromises = ids.map(async (id) => {
+                try {
+                    const c = new AbortController();
+                    const t = setTimeout(() => c.abort(), 8000);
+                    const res = await fetch(`/api/files/permanent/${id}`, { method: 'DELETE', credentials: 'include', signal: c.signal });
+                    clearTimeout(t);
+                    return res.ok ? id : null;
+                } catch(e) {
+                    return null;
+                }
+            });
+            const results = await Promise.all(deletePromises);
+            deletedIds = results.filter(Boolean);
+        }
 
-    if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete Selected';
-    }
+        // Remove deleted rows from DOM & local state
+        deletedIds.forEach(id => {
+            const row = document.getElementById(`trash-row-${id}`);
+            if (row) row.remove();
+            _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
+        });
 
-    if (deletedCount > 0) {
-        showToast(`${deletedCount} file(s) permanently deleted`, 'success');
-        loadStorageStats();
-        if (_trashFiles.length === 0) {
-            const container = document.getElementById('trashList');
-            const selectAllBar = document.getElementById('trashSelectBar');
-            if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
-            if (selectAllBar) selectAllBar.style.display = 'none';
+        // Restore opacity on any rows that failed
+        chks.forEach(chk => {
+            const id = String(chk.dataset.id);
+            if (!deletedIds.includes(id)) {
+                const row = document.getElementById(`trash-row-${id}`);
+                if (row) row.style.opacity = '1';
+            }
+        });
+
+        if (deletedIds.length > 0) {
+            showToast(`${deletedIds.length} file(s) permanently deleted`, 'success');
+            loadStorageStats();
+            if (_trashFiles.length === 0) {
+                const container = document.getElementById('trashList');
+                const selectAllBar = document.getElementById('trashSelectBar');
+                if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
+                if (selectAllBar) selectAllBar.style.display = 'none';
+            } else {
+                _onTrashCheckChange();
+            }
         } else {
-            _onTrashCheckChange();
+            showToast('Delete failed. Please try again.', 'error');
         }
-    } else {
-        showToast('Delete failed. Please try again.', 'error');
+    } catch (err) {
+        console.error('[trashDeleteSelected] Error:', err);
+        showToast('Delete encountered an error', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = !document.querySelector('.trash-item-chk:checked');
+            btn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete Selected';
+        }
     }
 }
 
@@ -1811,9 +1853,17 @@ async function permanentDeleteFile(id, btnEl) {
     if (!proceed) return;
     const row = document.getElementById(`trash-row-${id}`);
     if (row) row.style.opacity = '0.3';
-    if (btnEl) btnEl.disabled = true;
+    let originalHtml = '';
+    if (btnEl) {
+        originalHtml = btnEl.innerHTML;
+        btnEl.disabled = true;
+        btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+    }
     try {
-        const res = await fetch(`/api/files/permanent/${id}`, { method:'DELETE', credentials: 'include' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(`/api/files/permanent/${id}`, { method:'DELETE', credentials: 'include', signal: controller.signal });
+        clearTimeout(timeoutId);
         if (res.ok) {
             _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
             if (row) row.remove();
@@ -1829,13 +1879,19 @@ async function permanentDeleteFile(id, btnEl) {
             }
         } else {
             if (row) row.style.opacity = '1';
-            if (btnEl) btnEl.disabled = false;
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.innerHTML = originalHtml;
+            }
             showToast('Delete failed', 'error');
         }
     } catch(e) {
         if (row) row.style.opacity = '1';
-        if (btnEl) btnEl.disabled = false;
-        showToast('Delete failed: Network error', 'error');
+        if (btnEl) {
+            btnEl.disabled = false;
+            btnEl.innerHTML = originalHtml;
+        }
+        showToast('Delete failed: ' + (e.name === 'AbortError' ? 'Request timed out' : 'Network error'), 'error');
     }
 }
 

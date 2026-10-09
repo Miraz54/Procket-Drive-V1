@@ -116,39 +116,46 @@ module.exports = async function handler(req, res) {
     const userId = requireAuth(req, res);
     if (!userId) return;
 
-    const { id } = req.query;
+    const rawId = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
+    const fileId = rawId ? String(rawId).trim() : null;
+    if (!fileId) return res.status(400).json({ error: 'File ID is required' });
 
     try {
-        const hasAccess = await canUserModifyFile(userId, id);
-        if (!hasAccess) {
-            return res.status(403).json({ error: 'You do not have permission to delete this file' });
-        }
-
-        // Get the file record to find storage path
+        // Fetch file record once to check access and get storage path
         const { data: file, error: fetchError } = await supabaseAdmin
             .from('files')
-            .select('file_path')
-            .eq('id', id)
+            .select('id, user_id, folder_id, file_path')
+            .eq('id', fileId)
             .maybeSingle();
 
         if (fetchError || !file) return res.status(404).json({ error: 'File not found' });
 
-        // Extract relative path from public URL and remove from Supabase storage
-        try {
-            const parts = file.file_path ? file.file_path.split('/userfiles/') : [];
-            if (parts.length > 1) {
-                const storagePath = parts[1];
-                await supabaseAdmin.storage.from('userfiles').remove([storagePath]);
-            }
-        } catch(storageErr) {
-            console.warn('[permanent] Storage remove warning:', storageErr.message);
+        // Check ownership or editor access
+        let hasAccess = String(file.user_id).trim() === String(userId).trim();
+        if (!hasAccess && file.folder_id) {
+            hasAccess = await checkFolderUploadAccess(userId, file.folder_id);
         }
 
-        // Delete DB record
-        const { error: delErr } = await supabaseAdmin.from('files').delete().eq('id', id);
+        if (!hasAccess) {
+            return res.status(403).json({ error: 'You do not have permission to delete this file' });
+        }
+
+        // Delete DB record first (instant!)
+        const { error: delErr } = await supabaseAdmin.from('files').delete().eq('id', fileId);
         if (delErr) {
             console.error('[permanent] DB delete error:', delErr);
             return res.status(500).json({ error: 'Failed to delete file record' });
+        }
+
+        // Cleanup Supabase storage asynchronously without blocking response
+        if (file.file_path) {
+            const parts = file.file_path.split('/userfiles/');
+            if (parts.length > 1) {
+                const storagePath = parts[1];
+                supabaseAdmin.storage.from('userfiles').remove([storagePath]).catch(err => {
+                    console.warn('[permanent] Storage remove warning:', err.message);
+                });
+            }
         }
 
         res.json({ success: true });

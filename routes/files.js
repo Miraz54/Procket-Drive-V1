@@ -1,5 +1,7 @@
 const express = require('express');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { verifyToken } = require('../lib/auth');
 const router = express.Router();
@@ -593,40 +595,128 @@ router.post('/restore/:id', requireAuth, async (req, res) => {
     res.json({ success: true });
 });
 
+// Permanent batch delete
+router.post('/permanent-batch', requireAuth, async (req, res) => {
+    const userId = req.session?.userId || req.userId || verifyToken(req);
+    try {
+        let ids = [];
+        if (req.body) {
+            try {
+                const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+                ids = Array.isArray(body.ids) ? body.ids : (Array.isArray(body) ? body : []);
+            } catch(e) {
+                ids = [];
+            }
+        }
+        const cleanIds = (ids || []).map(id => String(id).trim()).filter(Boolean);
+        if (cleanIds.length === 0) {
+            return res.status(400).json({ error: 'Valid IDs required' });
+        }
+
+        const { data: files, error: fetchErr } = await supabaseAdmin
+            .from('files')
+            .select('id, user_id, file_path')
+            .in('id', cleanIds)
+            .eq('user_id', userId);
+
+        if (fetchErr) {
+            console.error('[permanent-batch] Fetch error:', fetchErr);
+            return res.status(500).json({ error: 'Fetch failed' });
+        }
+
+        if (!files || files.length === 0) {
+            return res.json({ success: true, deleted: 0, deletedIds: [] });
+        }
+
+        const validIds = files.map(f => f.id);
+
+        const { error: delErr } = await supabaseAdmin
+            .from('files')
+            .delete()
+            .in('id', validIds)
+            .eq('user_id', userId);
+
+        if (delErr) {
+            console.error('[permanent-batch] DB delete error:', delErr);
+            return res.status(500).json({ error: 'Failed to delete records' });
+        }
+
+        // Cleanup storage async
+        const storagePaths = files.map(f => {
+            const parts = f.file_path ? f.file_path.split('/userfiles/') : [];
+            return parts.length > 1 ? parts[1] : null;
+        }).filter(Boolean);
+
+        if (storagePaths.length > 0) {
+            supabaseAdmin.storage.from('userfiles').remove(storagePaths).catch(err => {
+                console.warn('[permanent-batch] Storage cleanup error:', err.message);
+            });
+        }
+
+        validIds.forEach(id => {
+            invalidateUserCaches(userId, id);
+            try {
+                const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${id}.webp`);
+                if (fs.existsSync(diskThumb)) {
+                    fs.unlinkSync(diskThumb);
+                }
+            } catch(e) {}
+        });
+
+        res.json({ success: true, deleted: validIds.length, deletedIds: validIds.map(String) });
+    } catch(err) {
+        console.error('[permanent-batch] Catch error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Permanent delete
 router.delete('/permanent/:id', requireAuth, async (req, res) => {
     const userId = req.session?.userId || req.userId || verifyToken(req);
-    const hasAccess = await canUserModifyFile(userId, req.params.id);
-    if (!hasAccess) return res.status(403).json({ error: 'You do not have permission to delete this file' });
+    const fileId = req.params.id;
 
-    const { data: file, error: fetchError } = await supabaseAdmin.from('files')
-        .select('file_path')
-        .eq('id', req.params.id)
-        .maybeSingle();
-
-    if (fetchError || !file) return res.status(404).json({ error: 'File not found' });
-    
     try {
-        const parts = file.file_path ? file.file_path.split('/userfiles/') : [];
-        if (parts.length > 1) {
-            await supabaseAdmin.storage.from('userfiles').remove([parts[1]]);
+        const { data: file, error: fetchError } = await supabaseAdmin.from('files')
+            .select('id, user_id, folder_id, file_path')
+            .eq('id', fileId)
+            .maybeSingle();
+
+        if (fetchError || !file) return res.status(404).json({ error: 'File not found' });
+
+        let hasAccess = String(file.user_id).trim() === String(userId).trim();
+        if (!hasAccess && file.folder_id) {
+            hasAccess = await checkFolderUploadAccess(userId, file.folder_id);
         }
-    } catch(storageErr) {
-        console.warn('[permanent] Storage remove warning:', storageErr.message);
-    }
-    
-    // Delete database record using admin client to bypass Database RLS
-    const { error: deleteError } = await supabaseAdmin.from('files').delete().eq('id', req.params.id);
-    if (deleteError) return res.status(500).json({ error: 'Delete failed' });
+        if (!hasAccess) return res.status(403).json({ error: 'You do not have permission to delete this file' });
 
-    // Remove disk thumbnail if exists
-    const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${req.params.id}.webp`);
-    if (fs.existsSync(diskThumb)) {
-        try { fs.unlinkSync(diskThumb); } catch(e) {}
-    }
+        // Delete database record first (instant!)
+        const { error: deleteError } = await supabaseAdmin.from('files').delete().eq('id', fileId);
+        if (deleteError) return res.status(500).json({ error: 'Delete failed' });
 
-    invalidateUserCaches(userId, req.params.id);
-    res.json({ success: true });
+        // Remove from storage async
+        if (file.file_path) {
+            const parts = file.file_path.split('/userfiles/');
+            if (parts.length > 1) {
+                supabaseAdmin.storage.from('userfiles').remove([parts[1]]).catch(storageErr => {
+                    console.warn('[permanent] Storage remove warning:', storageErr.message);
+                });
+            }
+        }
+
+        // Remove disk thumbnail if exists
+        try {
+            const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${fileId}.webp`);
+            if (fs.existsSync(diskThumb)) {
+                fs.unlinkSync(diskThumb);
+            }
+        } catch(e) {}
+
+        invalidateUserCaches(userId, fileId);
+        res.json({ success: true });
+    } catch(err) {
+        console.error('/permanent/:id error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // Preview (inline) — allows owner OR folder collaborator with fast thumbnail cache
