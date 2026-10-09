@@ -3392,16 +3392,43 @@ async function doAIImageEdit() {
     if (!prompt) { aiShowResult('imageEditResult','error','<i class="fas fa-exclamation-circle"></i> Please enter an edit prompt.'); return; }
     aiSetBtnLoading('imageEditBtn', true);
 
-    const isRemoveBg = /remove\s*bg|remove\s*background|transparent|cutout|cut\s*out|ব্যাকগ্রাউন্ড\s*রিমুভ|ব্যাকগ্রাউন্ড\s*সরাও|ব্যাকগ্রাউন্ড\s*ডিলিট|সাদা\s*ব্যাকগ্রাউন্ড|no\s*background/i.test(prompt);
+    const pLower = prompt.toLowerCase();
+    const isPureRemoveBg = /remove\s*bg|remove\s*background|transparent|cutout|cut\s*out|ব্যাকগ্রাউন্ড\s*রিমুভ|ব্যাকগ্রাউন্ড\s*সরাও|ব্যাকগ্রাউন্ড\s*ডিলিট|no\s*background/i.test(prompt);
+
+    // Check if user specifically requested a solid colored background
+    const bgColors = [
+        { k: 'black', hex: '#000000', name: 'Black' }, { k: 'কালো', hex: '#000000', name: 'Black' },
+        { k: 'white', hex: '#ffffff', name: 'White' }, { k: 'সাদা', hex: '#ffffff', name: 'White' },
+        { k: 'red', hex: '#ff0000', name: 'Red' }, { k: 'লাল', hex: '#ff0000', name: 'Red' },
+        { k: 'blue', hex: '#0066ff', name: 'Blue' }, { k: 'নীল', hex: '#0066ff', name: 'Blue' },
+        { k: 'green', hex: '#00cc44', name: 'Green' }, { k: 'সবুজ', hex: '#00cc44', name: 'Green' },
+        { k: 'yellow', hex: '#ffdd00', name: 'Yellow' }, { k: 'হলুদ', hex: '#ffdd00', name: 'Yellow' },
+        { k: 'purple', hex: '#8800ff', name: 'Purple' }, { k: 'বেগুনি', hex: '#8800ff', name: 'Purple' },
+        { k: 'pink', hex: '#ff66aa', name: 'Pink' }, { k: 'গোলাপি', hex: '#ff66aa', name: 'Pink' },
+        { k: 'orange', hex: '#ff8800', name: 'Orange' }, { k: 'কমলা', hex: '#ff8800', name: 'Orange' }
+    ];
+
+    let targetBgColor = null;
+    let targetBgName = null;
+    for (const c of bgColors) {
+        if (pLower.includes(c.k + ' background') || pLower.includes('background ' + c.k) || pLower.includes('ব্যাকগ্রাউন্ড ' + c.k) ||
+            pLower.includes('background to ' + c.k) || pLower.includes('bg ' + c.k)) {
+            targetBgColor = c.hex;
+            targetBgName = c.name;
+            break;
+        }
+    }
+
+    const isClientNeuralCandidate = isPureRemoveBg || targetBgColor;
 
     // Tier 1: Client-Side Deep Neural AI Segmentation (Sub-pixel smooth matting with hair/edge precision)
-    if (isRemoveBg) {
+    if (isClientNeuralCandidate) {
         try {
             aiShowResult('imageEditResult', 'loading',
                 `<div style="display:flex;flex-direction:column;gap:8px;">` +
                 `<div style="display:flex;align-items:center;gap:8px;">` +
                 `<i class="fas fa-sparkles fa-spin" style="color:#8b5cf6;font-size:1.1rem;"></i>` +
-                `<strong>স্মার্ট AI ব্যাকগ্রাউন্ড রিমুভাল চলছে…</strong>` +
+                `<strong>স্মার্ট AI ব্যাকগ্রাউন্ড প্রসেসিং চলছে…</strong>` +
                 `</div>` +
                 `<div id="aiNeuralStatus" style="font-size:0.83rem;color:var(--text-2);">Studio-Grade AI মডেল তৈরি হচ্ছে (সিল্কি স্মুথ কাটআউট)…</div>` +
                 `<div style="width:100%;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-top:2px;">` +
@@ -3440,23 +3467,46 @@ async function doAIImageEdit() {
                 }
             });
 
-            setNeuralProgress(95, 'সিল্কি ট্রান্সপারেন্ট PNG ড্রাইভ স্টোরেজে সেভ হচ্ছে…');
+            let finalBlob = cutoutBlob;
+            let finalExt = 'png';
+            let finalSuffix = 'no-bg';
+
+            if (targetBgColor) {
+                setNeuralProgress(90, `নতুন ব্যাকগ্রাউন্ড রঙ (${targetBgName}) যুক্ত হচ্ছে…`);
+                const bmp = await createImageBitmap(cutoutBlob);
+                const canvas = document.createElement('canvas');
+                canvas.width = bmp.width;
+                canvas.height = bmp.height;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = targetBgColor;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bmp, 0, 0);
+                finalBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
+                finalExt = 'jpg';
+                finalSuffix = `bg-${targetBgName.toLowerCase()}`;
+            }
+
+            setNeuralProgress(95, 'ড্রাইভ স্টোরেজে সেভ হচ্ছে…');
 
             const chosen = (_aiAllFiles || []).find(f => String(f.id) === String(fileId));
             const origBase = (chosen && chosen.name) ? chosen.name.replace(/\.[^.]+$/, '') : 'image';
-            const finalName = `${origBase}-no-bg.png`;
+            const finalName = `${origBase}-${finalSuffix}.${finalExt}`;
 
-            const savedFile = await saveBlobToDrive(cutoutBlob, finalName, folderId);
+            const savedFile = await saveBlobToDrive(finalBlob, finalName, folderId);
 
             const cacheBuster = Date.now();
+            const bgPattern = targetBgColor ? `background:${targetBgColor};` : 'background:repeating-conic-gradient(#808080 0% 25%, #ffffff 0% 50%) 50% / 16px 16px;';
+            const titleMsg = targetBgColor ? `Background Changed to ${targetBgName}!` : 'Studio-Grade AI Background Removed!';
+            const descMsg = targetBgColor ? `সিল্কি স্মুথ কাটআউটের সাথে নতুন ব্যাকগ্রাউন্ড ড্রাইভ স্টোরেজে সেভ করা হয়েছে।` : 'সিল্কি স্মুথ আল্ট্রা-এইচডি ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড সফলভাবে তৈরি হয়েছে এবং আপনার ড্রাইভে সংরক্ষিত হয়েছে।';
+
             let resultHtml = '<div style="display:flex;flex-direction:column;gap:8px;">'
-                           + '<div><i class="fas fa-check-circle" style="color:#10b981;"></i> <strong>Studio-Grade AI Background Removed!</strong></div>'
-                           + '<div style="font-size:0.85rem;color:var(--text-2);">সিল্কি স্মুথ আল্ট্রা-এইচডি ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড সফলভাবে তৈরি হয়েছে এবং আপনার ড্রাইভে সংরক্ষিত হয়েছে।</div>'
-                           + '<div style="margin-top:6px;border-radius:8px;overflow:hidden;max-height:160px;text-align:center;background:repeating-conic-gradient(#808080 0% 25%, #ffffff 0% 50%) 50% / 16px 16px;border:1px solid var(--border);padding:4px;">'
-                           + '<img src="/api/files/preview/' + savedFile.id + '?t=' + cacheBuster + '" alt="Cutout Preview" style="max-height:150px;max-width:100%;object-fit:contain;border-radius:6px;">'
+                           + `<div><i class="fas fa-check-circle" style="color:#10b981;"></i> <strong>${titleMsg}</strong></div>`
+                           + `<div style="font-size:0.85rem;color:var(--text-2);">${descMsg}</div>`
+                           + `<div style="margin-top:6px;border-radius:8px;overflow:hidden;max-height:160px;text-align:center;${bgPattern}border:1px solid var(--border);padding:4px;">`
+                           + '<img src="/api/files/preview/' + savedFile.id + '?t=' + cacheBuster + '" alt="Preview" style="max-height:150px;max-width:100%;object-fit:contain;border-radius:6px;">'
                            + '</div></div>';
             aiShowResult('imageEditResult', 'success', resultHtml);
-            pdToast('success', 'AI Edit Complete', 'Background removed smoothly with AI');
+            pdToast('success', 'AI Edit Complete', titleMsg);
             if (typeof loadFiles === 'function') await loadFiles();
             aiSetBtnLoading('imageEditBtn', false, 'Apply AI Edit', 'magic');
             return;

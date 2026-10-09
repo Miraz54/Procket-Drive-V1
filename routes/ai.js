@@ -26,9 +26,11 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 // ── Gemini API helper with automatic fallback & retry ─────────────
 const GEMINI_MODELS = [
+    'gemini-3.8-flash',
     'gemini-3.6-flash',
-    'gemini-3.1-flash-lite',
     'gemini-3.7-flash',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
     'gemini-flash-latest'
 ];
 
@@ -528,7 +530,10 @@ router.post('/image-edit', requireAuth, async (req, res) => {
             description: `Applied visual edit: "${prompt}"`,
             remove_background: false,
             background_color: null,
-            style: null,
+            blur_background: false,
+            style: null, // 'sketch' | 'cartoon' | 'cyberpunk' | 'vintage' | 'hdr' | 'oil_painting' | 'cinematic' | 'noir'
+            vibe: 'none', // 'warm' | 'cool' | 'moody' | 'none'
+            beautify: false,
             grayscale: false,
             sepia: false,
             brightness: 1.0,
@@ -545,18 +550,21 @@ router.post('/image-edit', requireAuth, async (req, res) => {
 
         // 1. Call Gemini to analyze the user's natural language edit prompt
         try {
-            const geminiRes = await callGemini('gemini-3.6-flash', [
+            const geminiRes = await callGemini('gemini-3.8-flash', [
                 {
                     role: 'user',
                     parts: [{
-                        text: `You are an expert AI image editor. A user wants to edit an image with this prompt: "${prompt}".
+                        text: `You are an expert AI photo editor. The user wants to edit an image with this prompt (which may be in Bengali, Banglish, or English): "${prompt}".
 Analyze what visual transformations are requested and translate them into image editing parameters.
-Respond ONLY with a valid JSON object matching this schema (no markdown, no other text):
+Respond ONLY with a valid JSON object matching this schema (no markdown, no thought, no explanation):
 {
   "description": "Concise 1 sentence describing what visual changes were made",
   "remove_background": false,
   "background_color": null,
+  "blur_background": false,
   "style": null,
+  "vibe": "none",
+  "beautify": false,
   "grayscale": false,
   "sepia": false,
   "brightness": 1.0,
@@ -573,13 +581,16 @@ Respond ONLY with a valid JSON object matching this schema (no markdown, no othe
 
 Rules:
 - "remove_background": true if user asks to remove background, transparent background, isolate subject, cutout, etc.
-- "background_color": hex color (e.g. "#ff0000" for red) if user wants to change/replace background with a specific color.
-- "style": "sketch" (pencil drawing/sketch), "cartoon" (comic/anime), "cyberpunk" (neon glow), "vintage" (retro 70s), "hdr" (vibrant pop), or null.
+- "background_color": hex color (e.g. "#000000" for black, "#ffffff" for white, "#ff0000" for red) if user wants to change/replace background with a specific color.
+- "blur_background": true if user asks for portrait mode / bokeh / blur background.
+- "style": "oil_painting" (oil painting / fine art / canvas), "cinematic" (movie teal-orange / dramatic film look), "sketch" (pencil drawing/sketch), "cartoon" (comic/anime), "cyberpunk" (neon glow), "vintage" (retro 70s), "hdr" (vibrant pop), "noir" (dramatic black and white), or null.
+- "vibe": "warm" (golden hour / sunset / warm glow), "cool" (matrix / blue chill / winter), "moody" (deep dramatic shadows), or "none".
+- "beautify": true if user asks to make face/photo beautiful, clear, clean skin, handsome, bright face, glow.
 - "grayscale": true for black and white, monochrome, b&w, desaturate.
 - "sepia": true for vintage sepia tone.
-- "brightness": number 0.3 to 2.0 (default 1.0).
+- "brightness": number 0.3 to 2.2 (default 1.0).
 - "saturation": number 0.0 to 2.5 (default 1.0).
-- "contrast": number 0.6 to 1.8 (default 1.0).
+- "contrast": number 0.6 to 2.0 (default 1.0).
 - "blur": number 0 to 15 (0 for none).
 - "sharpen": true if asked to sharpen, unblur, crisp, detail.
 - "negate": true if asked to invert, negative, x-ray.
@@ -628,30 +639,51 @@ Rules:
         ];
 
         for (const ck of colorKeywords) {
-            if (pLower.includes(ck.k + ' background') || pLower.includes('background ' + ck.k) || pLower.includes('ব্যাকগ্রাউন্ড ' + ck.k)) {
+            if (pLower.includes(ck.k + ' background') || pLower.includes('background ' + ck.k) || pLower.includes('ব্যাকগ্রাউন্ড ' + ck.k) ||
+                pLower.includes('background to ' + ck.k) || pLower.includes('bg ' + ck.k)) {
                 ops.remove_background = true;
                 ops.background_color = ck.hex;
                 break;
             }
         }
 
-        // Styles
-        if (pLower.includes('sketch') || pLower.includes('pencil') || pLower.includes('drawing') || pLower.includes('স্কেচ') || pLower.includes('ড্রয়িং')) {
+        // Styles & Artistic Effects
+        if (pLower.includes('oil') || pLower.includes('painting') || pLower.includes('paint') || pLower.includes('পেইন্টিং') || pLower.includes('তৈলচিত্র') || pLower.includes('চিত্র') || pLower.includes('আঁকা')) {
+            ops.style = 'oil_painting';
+        } else if (pLower.includes('cinematic') || pLower.includes('movie') || pLower.includes('film') || pLower.includes('teal orange') || pLower.includes('সিনেমাটিক') || pLower.includes('ফিল্মি')) {
+            ops.style = 'cinematic';
+        } else if (pLower.includes('sketch') || pLower.includes('pencil') || pLower.includes('drawing') || pLower.includes('স্কেচ') || pLower.includes('ড্রয়িং')) {
             ops.style = 'sketch';
         } else if (pLower.includes('cartoon') || pLower.includes('comic') || pLower.includes('anime') || pLower.includes('কার্টুন') || pLower.includes('কমিক')) {
             ops.style = 'cartoon';
-        } else if (pLower.includes('cyberpunk') || pLower.includes('neon') || pLower.includes('sci-fi') || pLower.includes('নিয়ন')) {
+        } else if (pLower.includes('cyberpunk') || pLower.includes('neon') || pLower.includes('sci-fi') || pLower.includes('নিয়ন') || pLower.includes('সাইবার')) {
             ops.style = 'cyberpunk';
-        } else if (pLower.includes('hdr') || pLower.includes('vibrant') || pLower.includes('pop') || pLower.includes('কালারফুল')) {
+        } else if (pLower.includes('hdr') || pLower.includes('vibrant') || pLower.includes('pop') || pLower.includes('কালারফুল') || pLower.includes('রঙিন')) {
             ops.style = 'hdr';
-        } else if (pLower.includes('vintage') || pLower.includes('retro') || pLower.includes('sepia') || pLower.includes('ভিন্টেজ')) {
+        } else if (pLower.includes('vintage') || pLower.includes('retro') || pLower.includes('sepia') || pLower.includes('ভিন্টেজ') || pLower.includes('সেপিয়া')) {
             ops.style = 'vintage';
             ops.sepia = true;
         }
 
+        // Atmosphere / Vibe
+        if (pLower.includes('sunset') || pLower.includes('golden hour') || pLower.includes('warm') || pLower.includes('সূর্যাস্ত') || pLower.includes('ওয়ার্ম') || pLower.includes('সানসেট') || pLower.includes('সোনালী')) {
+            ops.vibe = 'warm';
+        } else if (pLower.includes('cool') || pLower.includes('cold') || pLower.includes('matrix') || pLower.includes('ice') || pLower.includes('বরফ') || pLower.includes('কোল্ড') || pLower.includes('নীল ভাব')) {
+            ops.vibe = 'cool';
+        } else if (pLower.includes('moody') || pLower.includes('মুডি')) {
+            ops.vibe = 'moody';
+        }
+
+        // Beautify & Clarity
+        if (pLower.includes('beauty') || pLower.includes('beautiful') || pLower.includes('handsome') || pLower.includes('clean face') || pLower.includes('glow') ||
+            pLower.includes('সুন্দর') || pLower.includes('ফর্সা') || pLower.includes('পরিষ্কার') || pLower.includes('উজ্জ্বল করো') || pLower.includes('ভালো করো')) {
+            ops.beautify = true;
+        }
+
         // Filters
-        if (pLower.includes('black and white') || pLower.includes('b&w') || pLower.includes('monochrome') || pLower.includes('সাদা কালো')) {
+        if (pLower.includes('black and white') || pLower.includes('b&w') || pLower.includes('monochrome') || pLower.includes('সাদা কালো') || pLower.includes('সাদাকালো')) {
             ops.grayscale = true;
+            ops.contrast = Math.max(ops.contrast, 1.3);
         }
         if (pLower.includes('blur') || pLower.includes('ব্লার')) {
             ops.blur = ops.blur > 0 ? ops.blur : 6;
@@ -671,24 +703,26 @@ Rules:
         if (pLower.includes('mirror') || pLower.includes('flop') || pLower.includes('আয়না')) {
             ops.flop = true;
         }
-        if (pLower.includes('rotate 90') || pLower.includes('ঘুরাও ৯0')) {
+        if (pLower.includes('rotate 90') || pLower.includes('ঘুরাও ৯০') || pLower.includes('ঘুরাও ৯0')) {
             ops.rotate = 90;
         }
         if (pLower.includes('rotate 180')) {
             ops.rotate = 180;
         }
 
-        // Guarantee visible change: if everything is default, apply auto-clarity enhancement
-        const hasCustomAction = ops.remove_background || ops.style || ops.grayscale || ops.sepia ||
+        // Guarantee visible change: if everything is default, apply creative visual enhancement
+        const hasCustomAction = ops.remove_background || ops.background_color || ops.blur_background ||
+            ops.style || ops.vibe !== 'none' || ops.beautify || ops.grayscale || ops.sepia ||
             ops.brightness !== 1.0 || ops.saturation !== 1.0 || ops.contrast !== 1.0 ||
             ops.blur > 0 || ops.sharpen || ops.negate || ops.rotate !== 0 ||
             ops.flip || ops.flop || ops.tint;
 
         if (!hasCustomAction) {
-            ops.contrast = 1.2;
-            ops.saturation = 1.3;
+            ops.contrast = 1.35;
+            ops.saturation = 1.45;
+            ops.brightness = 1.08;
             ops.sharpen = true;
-            ops.description = `Auto-enhanced clarity, contrast and vibrant color balance for: "${prompt}"`;
+            ops.description = `Applied creative visual enhancement & vibrant clarity pop for: "${prompt}"`;
         }
 
         // 3. EXECUTE IMAGE TRANSFORMATIONS
@@ -725,7 +759,26 @@ Rules:
         }
 
         // B. Artistic Style Filters
-        if (ops.style === 'sketch') {
+        if (ops.style === 'oil_painting') {
+            workingBuffer = await sharp(workingBuffer)
+                .median(3)
+                .modulate({ saturation: 1.4, brightness: 1.05 })
+                .linear(1.15, -10)
+                .sharpen()
+                .toBuffer();
+            ops.description = `Rich oil painting canvas art style applied.`;
+        } else if (ops.style === 'cinematic') {
+            workingBuffer = await sharp(workingBuffer)
+                .recomb([
+                    [1.15, -0.05, -0.1],
+                    [-0.05, 1.05, 0.0],
+                    [-0.15, 0.05, 1.2]
+                ])
+                .modulate({ saturation: 1.35, brightness: 1.02 })
+                .linear(1.2, -15)
+                .toBuffer();
+            ops.description = `Moody cinematic teal & orange film look applied.`;
+        } else if (ops.style === 'sketch') {
             const g = await sharp(workingBuffer).grayscale().toBuffer();
             const inv = await sharp(g).negate().blur(4).toBuffer();
             workingBuffer = await sharp(g)
@@ -764,6 +817,53 @@ Rules:
                 .sharpen()
                 .toBuffer();
             ops.description = `High dynamic range (HDR) vibrant pop applied.`;
+        } else if (ops.style === 'noir') {
+            workingBuffer = await sharp(workingBuffer)
+                .grayscale()
+                .linear(1.45, -35)
+                .toBuffer();
+            ops.description = `High-contrast noir film monochrome applied.`;
+        }
+
+        // C. Atmosphere / Vibe Modulations
+        if (ops.vibe === 'warm') {
+            workingBuffer = await sharp(workingBuffer)
+                .recomb([
+                    [1.25, 0.05, -0.1],
+                    [0.1, 1.1, -0.1],
+                    [-0.1, -0.1, 0.8]
+                ])
+                .modulate({ saturation: 1.4, brightness: 1.1 })
+                .linear(1.15, -10)
+                .toBuffer();
+            ops.description = ops.description || `Golden hour warm sunset aesthetic applied.`;
+        } else if (ops.vibe === 'cool') {
+            workingBuffer = await sharp(workingBuffer)
+                .recomb([
+                    [0.85, 0.0, 0.1],
+                    [0.0, 1.05, 0.1],
+                    [0.05, 0.1, 1.3]
+                ])
+                .modulate({ saturation: 1.2, brightness: 1.02 })
+                .linear(1.15, -10)
+                .toBuffer();
+            ops.description = ops.description || `Cool matrix blue-tint aesthetic applied.`;
+        } else if (ops.vibe === 'moody') {
+            workingBuffer = await sharp(workingBuffer)
+                .modulate({ saturation: 0.9, brightness: 0.85 })
+                .linear(1.4, -30)
+                .toBuffer();
+            ops.description = ops.description || `Moody atmospheric shadows look applied.`;
+        }
+
+        // D. Beauty & Clarity Enhance
+        if (ops.beautify) {
+            workingBuffer = await sharp(workingBuffer)
+                .modulate({ brightness: 1.12, saturation: 1.15 })
+                .linear(1.12, -8)
+                .sharpen()
+                .toBuffer();
+            ops.description = ops.description || `Studio beauty clarity, illumination and face glow applied.`;
         }
 
         // C. Standard Pixel Modulations
