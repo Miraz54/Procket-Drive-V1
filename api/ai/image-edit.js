@@ -57,20 +57,17 @@ async function removeBackgroundSmart(inputBuffer, options = {}) {
         return [data[idx], data[idx + 1], data[idx + 2], data[idx + 3]];
     };
 
+    // Sample top perimeter & corners only (avoid bottom edge and center where subjects sit)
     const sampleCoords = [
-        [0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1],
-        [Math.floor(width / 2), 0], [Math.floor(width / 2), height - 1],
-        [0, Math.floor(height / 2)], [width - 1, Math.floor(height / 2)],
-        [Math.floor(width / 4), 0], [Math.floor(3 * width / 4), 0],
-        [0, Math.floor(height / 4)], [0, Math.floor(3 * height / 4)],
-        [width - 1, Math.floor(height / 4)], [width - 1, Math.floor(3 * height / 4)],
-        [Math.floor(width / 4), height - 1], [Math.floor(3 * width / 4), height - 1]
+        [0, 0], [width - 1, 0],
+        [Math.floor(width * 0.2), 0], [Math.floor(width * 0.8), 0],
+        [0, Math.floor(height * 0.1)], [width - 1, Math.floor(height * 0.1)]
     ];
 
     const bgColors = [];
     for (const [sx, sy] of sampleCoords) {
         const p = getPixel(sx, sy);
-        if (!bgColors.some(c => Math.abs(c[0] - p[0]) < 15 && Math.abs(c[1] - p[1]) < 15 && Math.abs(c[2] - p[2]) < 15)) {
+        if (!bgColors.some(c => Math.abs(c[0] - p[0]) < 18 && Math.abs(c[1] - p[1]) < 18 && Math.abs(c[2] - p[2]) < 18)) {
             bgColors.push(p);
         }
     }
@@ -91,27 +88,28 @@ async function removeBackgroundSmart(inputBuffer, options = {}) {
         return false;
     };
 
+    // Subject core bounding box: NEVER allow background flood fill to invade the subject's central core
+    const coreXMin = Math.floor(width * 0.25);
+    const coreXMax = Math.floor(width * 0.75);
+    const coreYMin = Math.floor(height * 0.30);
+    const coreYMax = Math.floor(height * 0.85);
+
     const visited = new Uint8Array(width * height);
     const queue = new Int32Array(width * height);
     let head = 0;
     let tail = 0;
 
+    // Seed ONLY from the top border and upper corners
     for (let x = 0; x < width; x++) {
-        const idxTop = x;
         const pTop = getPixel(x, 0);
         if (isBgColor(pTop[0], pTop[1], pTop[2])) {
-            visited[idxTop] = 1;
-            queue[tail++] = idxTop;
-        }
-        const idxBot = (height - 1) * width + x;
-        const pBot = getPixel(x, height - 1);
-        if (isBgColor(pBot[0], pBot[1], pBot[2])) {
-            visited[idxBot] = 1;
-            queue[tail++] = idxBot;
+            visited[x] = 1;
+            queue[tail++] = x;
         }
     }
 
-    for (let y = 1; y < height - 1; y++) {
+    const seedHeight = Math.floor(height * 0.35);
+    for (let y = 1; y < seedHeight; y++) {
         const idxLeft = y * width;
         const pLeft = getPixel(0, y);
         if (!visited[idxLeft] && isBgColor(pLeft[0], pLeft[1], pLeft[2])) {
@@ -131,86 +129,59 @@ async function removeBackgroundSmart(inputBuffer, options = {}) {
         const cx = curIdx % width;
         const cy = Math.floor(curIdx / width);
 
-        if (cx > 0) {
-            const nIdx = curIdx - 1;
-            if (!visited[nIdx]) {
-                const p = getPixel(cx - 1, cy);
-                if (isBgColor(p[0], p[1], p[2])) {
-                    visited[nIdx] = 1;
-                    queue[tail++] = nIdx;
-                }
+        const neighbors = [
+            cx > 0 ? curIdx - 1 : -1,
+            cx < width - 1 ? curIdx + 1 : -1,
+            cy > 0 ? curIdx - width : -1,
+            cy < height - 1 ? curIdx + width : -1
+        ];
+
+        for (const n of neighbors) {
+            if (n === -1 || visited[n]) continue;
+            const nx = n % width;
+            const ny = Math.floor(n / width);
+
+            // Block entering the core subject area
+            if (nx >= coreXMin && nx <= coreXMax && ny >= coreYMin && ny <= coreYMax) {
+                continue;
             }
-        }
-        if (cx < width - 1) {
-            const nIdx = curIdx + 1;
-            if (!visited[nIdx]) {
-                const p = getPixel(cx + 1, cy);
-                if (isBgColor(p[0], p[1], p[2])) {
-                    visited[nIdx] = 1;
-                    queue[tail++] = nIdx;
-                }
-            }
-        }
-        if (cy > 0) {
-            const nIdx = curIdx - width;
-            if (!visited[nIdx]) {
-                const p = getPixel(cx, cy - 1);
-                if (isBgColor(p[0], p[1], p[2])) {
-                    visited[nIdx] = 1;
-                    queue[tail++] = nIdx;
-                }
-            }
-        }
-        if (cy < height - 1) {
-            const nIdx = curIdx + width;
-            if (!visited[nIdx]) {
-                const p = getPixel(cx, cy + 1);
-                if (isBgColor(p[0], p[1], p[2])) {
-                    visited[nIdx] = 1;
-                    queue[tail++] = nIdx;
-                }
+
+            const p = getPixel(nx, ny);
+            if (isBgColor(p[0], p[1], p[2])) {
+                visited[n] = 1;
+                queue[tail++] = n;
             }
         }
     }
 
-    let visitedCount = 0;
+    // 2. Build 8-bit Alpha Mask buffer (0 for background, 255 for foreground)
+    const maskBuffer = Buffer.alloc(width * height);
     for (let i = 0; i < width * height; i++) {
-        if (visited[i]) visitedCount++;
+        maskBuffer[i] = visited[i] ? 0 : 255;
     }
 
-    if (visitedCount < (width * height * 0.04)) {
-        for (let i = 0; i < width * height; i++) {
-            const r = data[i * channels];
-            const g = data[i * channels + 1];
-            const b = data[i * channels + 2];
-            if (isBgColor(r, g, b)) {
-                visited[i] = 1;
-            }
-        }
-    }
+    // 3. Smooth the mask using Gaussian Blur (2.0 radius) for silky anti-aliased edge feathering
+    const smoothedMask = await sharp(maskBuffer, { raw: { width, height, channels: 1 } })
+        .blur(2.0)
+        .raw()
+        .toBuffer();
 
+    // 4. Combine RGB from original image with smoothed alpha channel
+    const rgbData = Buffer.alloc(width * height * 3);
     for (let i = 0; i < width * height; i++) {
-        if (visited[i]) {
-            data[i * channels + 3] = 0;
-        }
+        rgbData[i * 3]     = data[i * channels];
+        rgbData[i * 3 + 1] = data[i * channels + 1];
+        rgbData[i * 3 + 2] = data[i * channels + 2];
     }
 
-    if (feather) {
-        for (let y = 1; y < height - 1; y++) {
-            for (let x = 1; x < width - 1; x++) {
-                const i = y * width + x;
-                if (!visited[i]) {
-                    const nVisited = visited[i - 1] + visited[i + 1] + visited[i - width] + visited[i + width];
-                    if (nVisited > 0) {
-                        data[i * channels + 3] = Math.max(70, 255 - nVisited * 46);
-                    }
-                }
-            }
-        }
-    }
+    const rgbImage = sharp(rgbData, { raw: { width, height, channels: 3 } });
+    const finalPng = await rgbImage
+        .joinChannel(smoothedMask, { raw: { width, height, channels: 1 } })
+        .png({ compressionLevel: 8 })
+        .toBuffer();
 
     return {
-        buffer: await sharp(data, { raw: { width, height, channels } }).png().toBuffer(),
+        buffer: finalPng,
         width,
         height
     };

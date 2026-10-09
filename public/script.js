@@ -3325,6 +3325,65 @@ function clearImageEditFile() {
     if (metaEl) metaEl.textContent = '-';
 }
 
+// Helper: Save generated/edited image blob to user's Drive folder (tries direct signed upload, falls back to /upload)
+async function saveBlobToDrive(blob, filename, folderId) {
+    try {
+        const signRes = await fetch('/api/files/signed-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                filename: filename,
+                mimeType: blob.type || 'image/png',
+                folder_id: folderId || null
+            })
+        });
+        const signData = await signRes.json();
+        if (signRes.ok && signData && signData.signedUrl) {
+            const putRes = await fetch(signData.signedUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': blob.type || 'image/png' },
+                body: blob
+            });
+            if (putRes.ok) {
+                const metaRes = await fetch('/api/files/save-meta', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        original_name: filename,
+                        file_path: signData.publicUrl,
+                        file_size: blob.size,
+                        mime_type: blob.type || 'image/png',
+                        folder_id: folderId || null
+                    })
+                });
+                const metaData = await metaRes.json();
+                if (metaRes.ok && metaData && metaData.file) {
+                    return metaData.file;
+                }
+            }
+        }
+    } catch(err) {
+        console.warn('[saveBlobToDrive] Direct signed upload failed, using fallback:', err);
+    }
+
+    // Fallback: standard multipart /api/files/upload
+    const fd = new FormData();
+    fd.append('file', blob, filename);
+    if (folderId) fd.append('folder_id', folderId);
+    const upRes = await fetch('/api/files/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd
+    });
+    const upData = await upRes.json();
+    if (upRes.ok && upData && upData.file) {
+        return upData.file;
+    }
+    throw new Error((upData && upData.error) || 'Failed to save file to Drive');
+}
+
 async function doAIImageEdit() {
     const fileId   = document.getElementById('imageEditFileId').value;
     const prompt   = document.getElementById('imageEditPrompt').value.trim();
@@ -3332,7 +3391,82 @@ async function doAIImageEdit() {
     if (!fileId) { aiShowResult('imageEditResult','error','<i class="fas fa-exclamation-circle"></i> Please select an image.'); return; }
     if (!prompt) { aiShowResult('imageEditResult','error','<i class="fas fa-exclamation-circle"></i> Please enter an edit prompt.'); return; }
     aiSetBtnLoading('imageEditBtn', true);
-    aiShowResult('imageEditResult','loading','<i class="fas fa-circle-notch fa-spin"></i> Sending to Gemini AI… this may take 10-30 seconds.');
+
+    const isRemoveBg = /remove\s*bg|remove\s*background|transparent|cutout|cut\s*out|ব্যাকগ্রাউন্ড\s*রিমুভ|ব্যাকগ্রাউন্ড\s*সরাও|ব্যাকগ্রাউন্ড\s*ডিলিট|সাদা\s*ব্যাকগ্রাউন্ড|no\s*background/i.test(prompt);
+
+    // Tier 1: Client-Side Deep Neural AI Segmentation (Sub-pixel smooth matting with hair/edge precision)
+    if (isRemoveBg) {
+        try {
+            aiShowResult('imageEditResult', 'loading',
+                `<div style="display:flex;flex-direction:column;gap:8px;">` +
+                `<div style="display:flex;align-items:center;gap:8px;">` +
+                `<i class="fas fa-sparkles fa-spin" style="color:#8b5cf6;font-size:1.1rem;"></i>` +
+                `<strong>স্মার্ট AI ব্যাকগ্রাউন্ড রিমুভাল চলছে…</strong>` +
+                `</div>` +
+                `<div id="aiNeuralStatus" style="font-size:0.83rem;color:var(--text-2);">Studio-Grade AI মডেল তৈরি হচ্ছে (সিল্কি স্মুথ কাটআউট)…</div>` +
+                `<div style="width:100%;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-top:2px;">` +
+                `<div id="aiNeuralBar" style="width:15%;height:100%;background:linear-gradient(90deg,#8b5cf6,#06b6d4);transition:width 0.3s;border-radius:3px;"></div>` +
+                `</div></div>`
+            );
+
+            // Fetch preview blob of the image
+            const imgRes = await fetch('/api/files/preview/' + fileId, { credentials: 'include' });
+            if (!imgRes.ok) throw new Error('Could not fetch source image preview');
+            const sourceBlob = await imgRes.blob();
+
+            // Load @imgly/background-removal via dynamic ESM import
+            const { removeBackground } = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal/+esm');
+
+            const setNeuralProgress = (pct, msg) => {
+                const bar = document.getElementById('aiNeuralBar');
+                const st = document.getElementById('aiNeuralStatus');
+                if (bar) bar.style.width = Math.max(10, Math.min(98, pct)) + '%';
+                if (st) st.textContent = msg;
+            };
+
+            setNeuralProgress(30, 'হাই-প্রিসিশন নিউরাল সেগমেন্টেশন ও হেয়ার-ম্যাটিং শুরু হচ্ছে…');
+
+            const cutoutBlob = await removeBackground(sourceBlob, {
+                progress: (key, current, total) => {
+                    if (total > 0) {
+                        const pct = Math.min(100, Math.round((current / total) * 100));
+                        if (typeof key === 'string' && key.includes('fetch')) {
+                            setNeuralProgress(15 + Math.round(pct * 0.4), `AI মডেল ডাউনলোড: ${pct}%`);
+                        } else {
+                            setNeuralProgress(60 + Math.round(pct * 0.35), `হেয়ার ও এজ ম্যাটিং প্রসেসিং: ${pct}%`);
+                        }
+                    }
+                }
+            });
+
+            setNeuralProgress(95, 'সিল্কি ট্রান্সপারেন্ট PNG ড্রাইভ স্টোরেজে সেভ হচ্ছে…');
+
+            const chosen = (_aiAllFiles || []).find(f => String(f.id) === String(fileId));
+            const origBase = (chosen && chosen.name) ? chosen.name.replace(/\.[^.]+$/, '') : 'image';
+            const finalName = `${origBase}-no-bg.png`;
+
+            const savedFile = await saveBlobToDrive(cutoutBlob, finalName, folderId);
+
+            const cacheBuster = Date.now();
+            let resultHtml = '<div style="display:flex;flex-direction:column;gap:8px;">'
+                           + '<div><i class="fas fa-check-circle" style="color:#10b981;"></i> <strong>Studio-Grade AI Background Removed!</strong></div>'
+                           + '<div style="font-size:0.85rem;color:var(--text-2);">সিল্কি স্মুথ আল্ট্রা-এইচডি ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড সফলভাবে তৈরি হয়েছে এবং আপনার ড্রাইভে সংরক্ষিত হয়েছে।</div>'
+                           + '<div style="margin-top:6px;border-radius:8px;overflow:hidden;max-height:160px;text-align:center;background:repeating-conic-gradient(#808080 0% 25%, #ffffff 0% 50%) 50% / 16px 16px;border:1px solid var(--border);padding:4px;">'
+                           + '<img src="/api/files/preview/' + savedFile.id + '?t=' + cacheBuster + '" alt="Cutout Preview" style="max-height:150px;max-width:100%;object-fit:contain;border-radius:6px;">'
+                           + '</div></div>';
+            aiShowResult('imageEditResult', 'success', resultHtml);
+            pdToast('success', 'AI Edit Complete', 'Background removed smoothly with AI');
+            if (typeof loadFiles === 'function') await loadFiles();
+            aiSetBtnLoading('imageEditBtn', false, 'Apply AI Edit', 'magic');
+            return;
+        } catch(clientNeuralErr) {
+            console.warn('[doAIImageEdit] Client Neural AI unavailable or failed, switching to Server Engine fallback:', clientNeuralErr);
+            // Fall through to server-side engine below
+        }
+    }
+
+    // Tier 2: Server-Side Engine (Handles style filters, visual transformations, and fallback matting)
+    aiShowResult('imageEditResult','loading','<i class="fas fa-circle-notch fa-spin"></i> AI ইমেজ এডিটিং প্রসেস হচ্ছে…');
     try {
         const resp = await fetch('/api/ai/image-edit', {
             method: 'POST', credentials: 'include',
