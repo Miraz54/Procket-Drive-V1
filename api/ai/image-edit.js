@@ -35,7 +35,8 @@ async function callGemini(contents) {
             const resp = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents })
+                body: JSON.stringify({ contents }),
+                signal: AbortSignal.timeout(6000)
             });
             if (resp.ok) return await resp.json();
         } catch(e) {
@@ -326,27 +327,28 @@ Rules:
         const pLower = prompt.toLowerCase();
 
         // Generative Scene / Landscape Background detection
+        // Generative Scene / Landscape Background detection
         if (pLower.includes('hill') || pLower.includes('পাহাড়') || pLower.includes('pahar')) {
             ops.generate_background = true;
-            ops.background_prompt = ops.background_prompt || 'majestic rolling green hills landscape under a picturesque sky, soft cinematic sunlight, 8k wallpaper quality, photorealistic, no humans';
+            ops.background_prompt = ops.background_prompt || 'scenic green hills and mountains, eye level vantage point on hilltop meadow, rolling lush green mountain ridges in background, soft natural golden morning sunlight, cinematic landscape, hyperrealistic 8k, empty scenic vista, no humans, no people, uninhabited';
         } else if (pLower.includes('mountain') || pLower.includes('পর্বত')) {
             ops.generate_background = true;
-            ops.background_prompt = ops.background_prompt || 'spectacular snow-capped mountain peaks alpine landscape, dramatic blue sky, photorealistic 8k, no humans';
+            ops.background_prompt = ops.background_prompt || 'spectacular alpine mountain range, eye level viewpoint on mountain ridge, snow-capped peaks in distance, soft natural sunlight, clear skies, hyperrealistic 8k, empty scenic vista, no humans, no people, uninhabited';
         } else if (pLower.includes('beach') || pLower.includes('sea') || pLower.includes('ocean') || pLower.includes('সমুদ্র') || pLower.includes('সৈকত')) {
             ops.generate_background = true;
-            ops.background_prompt = ops.background_prompt || 'tropical paradise beach with turquoise ocean water, white sand and palm trees, golden sunlight, 8k, no humans';
+            ops.background_prompt = ops.background_prompt || 'tropical paradise beach shoreline, eye level view of turquoise ocean waves and white sand, palm trees in distant background, warm golden sunlight, 8k, empty beach, no humans, no people, uninhabited';
         } else if (pLower.includes('forest') || pLower.includes('jungle') || pLower.includes('বন') || pLower.includes('জঙ্গল')) {
             ops.generate_background = true;
-            ops.background_prompt = ops.background_prompt || 'lush green enchanted forest with sunbeams through canopy, hyperrealistic 8k, no humans';
+            ops.background_prompt = ops.background_prompt || 'enchanted lush green woodland, eye level path through forest with sunbeams filtering through trees, soft nature atmosphere, hyperrealistic 8k, empty forest, no humans, no people, uninhabited';
         } else if (pLower.includes('garden') || pLower.includes('বাগান')) {
             ops.generate_background = true;
-            ops.background_prompt = ops.background_prompt || 'vibrant blooming flower garden with lush greenery and warm sunlight, 8k, no humans';
+            ops.background_prompt = ops.background_prompt || 'vibrant blooming botanical garden, eye level view of lush green lawn and colorful flower beds, soft natural morning sunlight, 8k, empty garden, no humans, no people';
         } else if (pLower.includes('city') || pLower.includes('street') || pLower.includes('শহর')) {
             ops.generate_background = true;
-            ops.background_prompt = ops.background_prompt || 'modern futuristic city street skyline, cinematic atmosphere, 8k, no humans';
+            ops.background_prompt = ops.background_prompt || 'modern city street skyline, eye level sidewalk view, impressive architecture, soft depth of field, natural daylight, 8k, no humans';
         } else if (pLower.includes('paris') || pLower.includes('eiffel')) {
             ops.generate_background = true;
-            ops.background_prompt = ops.background_prompt || 'beautiful Parisian street with Eiffel Tower in background, morning light, 8k, no humans';
+            ops.background_prompt = ops.background_prompt || 'charming Parisian avenue, eye level street view with Eiffel Tower standing in distant horizon, soft morning light, 8k, no humans';
         }
 
         // Background removal & replacement
@@ -466,7 +468,9 @@ Rules:
         // 0. Generative AI Background / Landscape (Pollinations Flux AI)
         if (ops.generate_background && ops.background_prompt) {
             try {
-                const bgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(ops.background_prompt)}?width=1024&height=1024&model=flux&nologo=true`;
+                // Enrich prompt for true photographic eye-level realism (avoid 'portrait' keyword to eliminate accidental faces)
+                const studioPrompt = `${ops.background_prompt}, photorealistic eye-level outdoor landscape photography, standing on a scenic green hilltop ridge meadow, soft rolling lush green hills in background, natural morning sunlight, cinematic landscape, hyperrealistic 8k, empty scenic vista, no humans, no people, uninhabited`;
+                const bgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(studioPrompt)}?width=1024&height=1024&model=flux&nologo=true`;
                 const bgResp = await fetch(bgUrl);
                 if (bgResp.ok) {
                     const bgBuffer = Buffer.from(await bgResp.arrayBuffer());
@@ -486,18 +490,31 @@ Rules:
                         subjectBuffer = bgRes.buffer;
                     }
 
+                    // Remove any watermark badge from generated background (crop bottom 7%) and apply soft optical bokeh
+                    const bgMeta = await sharp(bgBuffer).metadata();
+                    const cropH = Math.floor(bgMeta.height * 0.93);
                     const resizedBg = await sharp(bgBuffer)
+                        .extract({ left: 0, top: 0, width: bgMeta.width, height: cropH })
                         .resize(imgMeta.width, imgMeta.height, { fit: 'cover' })
+                        .blur(1.8) // Authentic 85mm f/1.8 lens bokeh
+                        .modulate({ brightness: 0.98, saturation: 1.05 })
                         .toBuffer();
 
+                    // Harmonize subject lighting with the new outdoor environment
+                    const harmonizedSubject = await sharp(subjectBuffer)
+                        .modulate({ brightness: 1.01, saturation: 1.03 })
+                        .sharpen({ sigma: 0.8, m1: 0.8, m2: 0.5 })
+                        .toBuffer();
+
+                    // Ground subject naturally at the bottom (gravity: 'south')
                     workingBuffer = await sharp(resizedBg)
-                        .composite([{ input: subjectBuffer, blend: 'over' }])
-                        .jpeg({ quality: 92 })
+                        .composite([{ input: harmonizedSubject, blend: 'over', gravity: 'south' }])
+                        .jpeg({ quality: 97, chromaSubsampling: '4:4:4' })
                         .toBuffer();
 
                     outMime = 'image/jpeg';
                     ext = 'jpg';
-                    ops.description = `AI generated realistic landscape ("${ops.background_prompt.slice(0, 45)}...") and placed behind subject.`;
+                    ops.description = `Studio-grade photorealistic landscape generated and harmonized behind subject.`;
                     ops.remove_background = false;
                 }
             } catch(bgGenErr) {
