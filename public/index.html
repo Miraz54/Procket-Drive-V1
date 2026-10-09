@@ -443,6 +443,17 @@
                 <h3><i class="fas fa-trash-alt"></i> Trash</h3>
                 <button class="modal-close-btn" onclick="closeTrashModal()"><i class="fas fa-times"></i></button>
             </div>
+            <!-- Select All bar — hidden when trash is empty -->
+            <div id="trashSelectBar" class="trash-select-bar" style="display:none;">
+                <label class="trash-select-all-label">
+                    <input type="checkbox" id="trashSelectAllChk" onchange="trashToggleSelectAll()">
+                    <span>Select All</span>
+                </label>
+                <button id="trashDeleteSelectedBtn" class="btn-primary btn-small" onclick="trashDeleteSelected()" disabled
+                    style="background:linear-gradient(135deg,#ef4444,#f87171);box-shadow:0 2px 10px rgba(239,68,68,0.35);margin-left:auto;">
+                    <i class="fas fa-trash-alt"></i> Delete Selected
+                </button>
+            </div>
             <div id="trashList" class="trash-container"></div>
         </div>
     </div>

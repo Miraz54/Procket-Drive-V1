@@ -517,9 +517,11 @@ router.delete('/permanent/:id', requireAuth, async (req, res) => {
 router.get('/preview/:id', requireAuth, async (req, res) => {
     const fileId = req.params.id;
     const isThumb = (req.query.thumb === '1' || req.query.thumb === 'true');
+    // If a cache-buster timestamp is provided (?t=...), bypass caches completely
+    const cacheBust = !!req.query.t;
 
-    // Return instant disk thumbnail if available
-    if (isThumb) {
+    // Return instant disk thumbnail if available (skip if cache-busting)
+    if (isThumb && !cacheBust) {
         const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${fileId}.webp`);
         if (fs.existsSync(diskThumb)) {
             res.setHeader('Content-Type', 'image/webp');
@@ -568,7 +570,7 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
                 .webp({ quality: 80 })
                 .toBuffer();
 
-            // Save to disk asynchronously
+            // Save to disk asynchronously (even during cache-bust, update the disk thumb)
             const diskThumb = path.join(__dirname, '..', 'public', 'thumbs', `${fileId}.webp`);
             fs.writeFile(diskThumb, thumbBuf, () => {});
 
@@ -578,7 +580,7 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
             }
             thumbCache.set(fileId, { buffer: thumbBuf, mimeType: 'image/webp' });
             res.setHeader('Content-Type', 'image/webp');
-            res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+            res.setHeader('Cache-Control', cacheBust ? 'no-cache, no-store, must-revalidate' : 'public, max-age=86400, stale-while-revalidate=604800');
             res.setHeader('Content-Disposition', 'inline');
             return res.send(thumbBuf);
         } catch(e) {
@@ -587,10 +589,11 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
     }
 
     res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    res.setHeader('Cache-Control', cacheBust ? 'no-cache, no-store, must-revalidate' : 'public, max-age=86400, stale-while-revalidate=604800');
     res.setHeader('Content-Disposition', 'inline');
     res.send(buffer);
 });
+
 
 // Download (force attachment) — allows owner OR folder collaborator
 router.get('/download/:id', requireAuth, async (req, res) => {

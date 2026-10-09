@@ -339,6 +339,10 @@ function switchView(view) {
         const breadcrumbBar = document.getElementById('breadcrumbBar');
         if (breadcrumbBar) breadcrumbBar.style.display = folderStack.length > 0 ? 'flex' : 'none';
         if (dropzone) dropzone.style.display = '';
+        // Clear stale content immediately before fetching fresh data
+        allFiles = [];
+        allFolders = [];
+        renderDriveView();
         loadFiles();
         if (window.location.pathname !== '/') {
             window.history.pushState(null, '', '/');
@@ -585,9 +589,20 @@ async function loadFiles() {
             ? `/api/folders/list?parent_id=${currentFolderId}`
             : `/api/folders/list`;
 
+        // Show a subtle loading indicator in the file list while fetching
+        const container = document.getElementById('fileList');
+        if (container && !container.querySelector('.files-loading-spinner')) {
+            const spinner = document.createElement('div');
+            spinner.className = 'files-loading-spinner';
+            spinner.style.cssText = 'display:flex;justify-content:center;align-items:center;padding:40px;color:var(--text-3);gap:10px;font-size:0.9rem;';
+            spinner.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="font-size:1.3rem;"></i> Loading...';
+            // Only show spinner if list is currently empty (avoid flicker on refresh)
+            if (container.children.length === 0) container.appendChild(spinner);
+        }
+
         const [filesRes, foldersRes] = await Promise.all([
-            fetch(fileUrl, { credentials: 'include' }).catch((e) => { console.error('[loadFiles] fetch files error:', e); return null; }),
-            fetch(folderUrl, { credentials: 'include' }).catch((e) => { console.error('[loadFiles] fetch folders error:', e); return null; })
+            fetch(fileUrl, { credentials: 'include', cache: 'no-store' }).catch((e) => { console.error('[loadFiles] fetch files error:', e); return null; }),
+            fetch(folderUrl, { credentials: 'include', cache: 'no-store' }).catch((e) => { console.error('[loadFiles] fetch folders error:', e); return null; })
         ]);
 
         // If either request returns 401 (unauthorized), redirect/logout to clear the UI
@@ -715,6 +730,12 @@ async function openFolder(id) {
     folderStack.push({ id, name });
     const titleEl = document.getElementById('contentTitle');
     if (titleEl) titleEl.textContent = name;
+
+    // Clear stale content immediately so old files don't show during load
+    allFiles = [];
+    allFolders = [];
+    renderDriveView();
+
     loadFiles();
 }
 
@@ -724,6 +745,12 @@ function goToRoot() {
     folderStack = [];
     const titleEl = document.getElementById('contentTitle');
     if (titleEl) titleEl.textContent = 'My Drive';
+
+    // Clear stale content immediately
+    allFiles = [];
+    allFolders = [];
+    renderDriveView();
+
     loadFiles();
 }
 
@@ -734,6 +761,12 @@ function goToStackIndex(i) {
     const name = f ? f.name : 'My Drive';
     const titleEl = document.getElementById('contentTitle');
     if (titleEl) titleEl.textContent = name;
+
+    // Clear stale content immediately
+    allFiles = [];
+    allFolders = [];
+    renderDriveView();
+
     loadFiles();
 }
 
@@ -1532,16 +1565,30 @@ async function loadTrash() {
     } catch(e) { console.error(e); }
 }
 
+// Internal trash state for optimistic updates
+let _trashFiles = [];
+
 function displayTrash(files) {
+    _trashFiles = files;
+    _renderTrashList();
+}
+
+function _renderTrashList() {
     const container = document.getElementById('trashList');
     if (!container) return;
-    if (files.length === 0) {
+    const selectAllBar = document.getElementById('trashSelectBar');
+    if (_trashFiles.length === 0) {
         container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
+        if (selectAllBar) selectAllBar.style.display = 'none';
         return;
     }
-    container.innerHTML = files.map(f => `
-    <div class="trash-item">
+    if (selectAllBar) selectAllBar.style.display = 'flex';
+    container.innerHTML = _trashFiles.map(f => `
+    <div class="trash-item" id="trash-row-${f.id}">
         <div class="trash-info">
+            <label class="trash-checkbox-wrap" title="Select">
+                <input type="checkbox" class="trash-item-chk" data-id="${f.id}" onchange="_onTrashCheckChange()">
+            </label>
             <div>${getFileIcon(f.type, f.id, f.name)}</div>
             <div>
                 <div class="trash-name">${escapeHtml(f.name)}</div>
@@ -1549,31 +1596,117 @@ function displayTrash(files) {
             </div>
         </div>
         <div class="trash-actions">
-            <button onclick="restoreFile(${f.id})" class="btn-primary btn-small" style="background:linear-gradient(135deg,#22c55e,#4ade80);box-shadow:0 2px 10px rgba(34,197,94,0.4);">
+            <button onclick="restoreFile(${f.id}, this)" class="btn-primary btn-small" style="background:linear-gradient(135deg,#22c55e,#4ade80);box-shadow:0 2px 10px rgba(34,197,94,0.4);">
                 <i class="fas fa-trash-restore"></i> Restore
             </button>
-            <button onclick="permanentDeleteFile(${f.id})" class="btn-primary btn-small" style="background:linear-gradient(135deg,#ef4444,#f87171);box-shadow:0 2px 10px rgba(239,68,68,0.4);">
+            <button onclick="permanentDeleteFile(${f.id}, this)" class="btn-primary btn-small" style="background:linear-gradient(135deg,#ef4444,#f87171);box-shadow:0 2px 10px rgba(239,68,68,0.4);">
                 <i class="fas fa-trash-alt"></i> Delete Forever
             </button>
         </div>
     </div>`).join('');
 }
 
+function _onTrashCheckChange() {
+    const chks = document.querySelectorAll('.trash-item-chk');
+    const selected = [...chks].filter(c => c.checked);
+    const selectAllChk = document.getElementById('trashSelectAllChk');
+    if (selectAllChk) selectAllChk.checked = selected.length === chks.length && chks.length > 0;
+    const btn = document.getElementById('trashDeleteSelectedBtn');
+    if (btn) btn.disabled = selected.length === 0;
+}
+
+function trashToggleSelectAll() {
+    const chk = document.getElementById('trashSelectAllChk');
+    const all = document.querySelectorAll('.trash-item-chk');
+    all.forEach(c => c.checked = chk.checked);
+    _onTrashCheckChange();
+}
+
+async function trashDeleteSelected() {
+    const chks = [...document.querySelectorAll('.trash-item-chk:checked')];
+    if (chks.length === 0) return;
+    const proceed = await showConfirmDialog('Delete Selected Forever ⚠️', `Permanently delete ${chks.length} file(s)? This cannot be undone.`, true);
+    if (!proceed) return;
+    let deleted = 0;
+    for (const chk of chks) {
+        const id = Number(chk.dataset.id);
+        try {
+            const res = await fetch(`/api/files/permanent/${id}`, { method: 'DELETE', credentials: 'include' });
+            if (res.ok) {
+                // optimistic: remove from DOM and state
+                const row = document.getElementById(`trash-row-${id}`);
+                if (row) row.remove();
+                _trashFiles = _trashFiles.filter(f => f.id !== id);
+                deleted++;
+            }
+        } catch(e) {}
+    }
+    if (deleted > 0) {
+        showToast(`${deleted} file(s) permanently deleted`, 'success');
+        loadStorageStats();
+        if (_trashFiles.length === 0) {
+            const container = document.getElementById('trashList');
+            const selectAllBar = document.getElementById('trashSelectBar');
+            if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
+            if (selectAllBar) selectAllBar.style.display = 'none';
+        } else {
+            _onTrashCheckChange();
+        }
+    }
+}
+
 function showTrashView() { openModal('trashModal'); loadTrash(); }
 function closeTrashModal() { closeModal('trashModal'); }
 
-async function restoreFile(id) {
+async function restoreFile(id, btnEl) {
+    // Optimistic: remove from DOM immediately
+    const row = document.getElementById(`trash-row-${id}`);
+    if (row) row.style.opacity = '0.4';
     const res = await fetch(`/api/files/restore/${id}`, { method:'POST', credentials: 'include' });
-    if (res.ok) { showToast('File restored!', 'success'); loadTrash(); loadFiles(); loadStorageStats(); }
-    else { showToast('Restore failed', 'error'); }
+    if (res.ok) {
+        // Remove from internal state and DOM
+        _trashFiles = _trashFiles.filter(f => f.id !== id);
+        if (row) row.remove();
+        showToast('File restored!', 'success');
+        loadFiles();
+        loadStorageStats();
+        if (_trashFiles.length === 0) {
+            const container = document.getElementById('trashList');
+            const selectAllBar = document.getElementById('trashSelectBar');
+            if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
+            if (selectAllBar) selectAllBar.style.display = 'none';
+        }
+    } else {
+        if (row) row.style.opacity = '1';
+        showToast('Restore failed', 'error');
+    }
 }
 
-async function permanentDeleteFile(id) {
+async function permanentDeleteFile(id, btnEl) {
     const proceed = await showConfirmDialog('Delete Forever ⚠️', 'This file will be permanently deleted. This action cannot be undone. Are you sure?', true);
     if (!proceed) return;
+    // Optimistic: fade out row
+    const row = document.getElementById(`trash-row-${id}`);
+    if (row) row.style.opacity = '0.4';
     const res = await fetch(`/api/files/permanent/${id}`, { method:'DELETE', credentials: 'include' });
-    if (res.ok) { showToast('Permanently deleted', 'success'); loadTrash(); loadStorageStats(); }
-    else { showToast('Delete failed', 'error'); }
+    if (res.ok) {
+        // Remove from internal state and DOM
+        _trashFiles = _trashFiles.filter(f => f.id !== id);
+        if (row) row.remove();
+        showToast('Permanently deleted', 'success');
+        loadStorageStats();
+        if (_trashFiles.length === 0) {
+            const container = document.getElementById('trashList');
+            const selectAllBar = document.getElementById('trashSelectBar');
+            if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
+            if (selectAllBar) selectAllBar.style.display = 'none';
+        } else {
+            _onTrashCheckChange();
+        }
+    } else {
+        if (row) row.style.opacity = '1';
+        showToast('Delete failed', 'error');
+    }
 }
 
 // User dropdown
@@ -3021,8 +3154,10 @@ async function doAIImageEdit() {
                 resultHtml += '<div style="font-size:0.85rem;color:var(--text-2);">' + escapeHtml(data.description) + '</div>';
             }
             if (data.file && data.file.id) {
+                // Add cache-buster timestamp so browser always loads fresh edited image
+                const cacheBuster = Date.now();
                 resultHtml += '<div style="margin-top:6px;border-radius:8px;overflow:hidden;max-height:160px;text-align:center;background:rgba(0,0,0,0.06);border:1px solid var(--border);padding:4px;">'
-                            + '<img src="/api/files/preview/' + data.file.id + '" alt="Edited Preview" style="max-height:150px;max-width:100%;object-fit:contain;border-radius:6px;">'
+                            + '<img src="/api/files/preview/' + data.file.id + '?t=' + cacheBuster + '" alt="Edited Preview" style="max-height:150px;max-width:100%;object-fit:contain;border-radius:6px;">'
                             + '</div>';
             }
             resultHtml += '</div>';
