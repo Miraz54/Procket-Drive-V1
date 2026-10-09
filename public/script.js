@@ -3304,6 +3304,14 @@ async function openAIImageEditorModal() {
     openModal('aiImageEditorModal');
 }
 function closeAIImageEditorModal() { closeModal('aiImageEditorModal'); }
+function setEditPrompt(text) {
+    const input = document.getElementById('imageEditPrompt');
+    if (input) {
+        input.value = text;
+        input.focus();
+    }
+}
+window.setEditPrompt = setEditPrompt;
 
 function clearImageEditFile() {
     document.getElementById('imageEditFileId').value = '';

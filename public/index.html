@@ -726,7 +726,17 @@
                 <div class="field-label" style="margin-top:16px;">Edit Prompt</div>
                 <div class="input-group">
                     <i class="fas fa-pencil-alt"></i>
-                    <input type="text" id="imageEditPrompt" placeholder="e.g. Remove background, make it vintage, add blur…">
+                    <input type="text" id="imageEditPrompt" placeholder="e.g. Remove background, pencil sketch, cartoon, vintage…">
+                </div>
+                <!-- Quick Prompt Presets -->
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Remove background')">🪄 Remove Background</button>
+                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Pencil sketch')">🎨 Pencil Sketch</button>
+                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Cartoon art')">✨ Cartoon Art</button>
+                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Cyberpunk neon')">🌆 Cyberpunk</button>
+                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Vintage retro')">📸 Vintage</button>
+                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Vibrant HDR')">☀️ Vibrant HDR</button>
+                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Black and white')">⚫ B&amp;W</button>
                 </div>
 
                 <div class="field-label" style="margin-top:12px;">Save edited image to folder</div>
