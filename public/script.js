@@ -1601,8 +1601,8 @@ async function deleteFile(id) {
                 });
         } else {
             // Optimistic update — remove from local list and update bar immediately
-            const deleted = allFiles.find(f => f.id === id);
-            allFiles = allFiles.filter(f => f.id !== id);
+            const deleted = allFiles.find(f => String(f.id) === String(id));
+            allFiles = allFiles.filter(f => String(f.id) !== String(id));
             if (deleted) {
                 const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
                 updateStorageUI(localUsed, allFiles.length);
@@ -1691,7 +1691,7 @@ async function trashDeleteSelected() {
                 // optimistic: remove from DOM and state
                 const row = document.getElementById(`trash-row-${id}`);
                 if (row) row.remove();
-                _trashFiles = _trashFiles.filter(f => f.id !== id);
+                _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
                 deleted++;
             }
         } catch(e) {}
@@ -1720,7 +1720,7 @@ async function restoreFile(id, btnEl) {
     const res = await fetch(`/api/files/restore/${id}`, { method:'POST', credentials: 'include' });
     if (res.ok) {
         // Remove from internal state and DOM
-        _trashFiles = _trashFiles.filter(f => f.id !== id);
+        _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
         if (row) row.remove();
         showToast('File restored!', 'success');
         loadFiles();
@@ -1746,7 +1746,7 @@ async function permanentDeleteFile(id, btnEl) {
     const res = await fetch(`/api/files/permanent/${id}`, { method:'DELETE', credentials: 'include' });
     if (res.ok) {
         // Remove from internal state and DOM
-        _trashFiles = _trashFiles.filter(f => f.id !== id);
+        _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
         if (row) row.remove();
         showToast('Permanently deleted', 'success');
         loadStorageStats();
