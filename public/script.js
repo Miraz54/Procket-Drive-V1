@@ -3393,7 +3393,15 @@ async function doAIImageEdit() {
     aiSetBtnLoading('imageEditBtn', true);
 
     const pLower = prompt.toLowerCase();
-    const isPureRemoveBg = /remove\s*bg|remove\s*background|transparent|cutout|cut\s*out|ব্যাকগ্রাউন্ড\s*রিমুভ|ব্যাকগ্রাউন্ড\s*সরাও|ব্যাকগ্রাউন্ড\s*ডিলিট|no\s*background/i.test(prompt);
+
+    // Check if user is asking to add or generate a landscape / scene / place (e.g. hill, beach, mountains, city)
+    const isAddingScene = /add|put|place|hill|pahar|mountain|beach|sea|ocean|forest|jungle|city|paris|sky|garden|street|landscape|পাহাড়|পর্বত|সমুদ্র|সৈকত|যুক্ত|দাও|করো|বসাও|লাগাও/i.test(prompt);
+
+    const isPureRemoveBg = !isAddingScene && (
+        /^(make\s*)?(it\s*)?transparent$/i.test(prompt.trim()) ||
+        /remove\s*bg|remove\s*background|cut\s*out|cutout|isolate\s*subject|ব্যাকগ্রাউন্ড\s*রিমুভ|ব্যাকগ্রাউন্ড\s*সরাও|ব্যাকগ্রাউন্ড\s*ডিলিট|no\s*background/i.test(prompt) ||
+        (/transparent/i.test(prompt) && !/add|hill|beach|mountain|sky|city|put|place/i.test(prompt))
+    );
 
     // Check if user specifically requested a solid colored background
     const bgColors = [
@@ -3419,7 +3427,7 @@ async function doAIImageEdit() {
         }
     }
 
-    const isClientNeuralCandidate = isPureRemoveBg || targetBgColor;
+    const isClientNeuralCandidate = !isAddingScene && (isPureRemoveBg || targetBgColor);
 
     // Tier 1: Client-Side Deep Neural AI Segmentation (Sub-pixel smooth matting with hair/edge precision)
     if (isClientNeuralCandidate) {

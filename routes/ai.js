@@ -528,6 +528,8 @@ router.post('/image-edit', requireAuth, async (req, res) => {
         // Default editing parameters
         let ops = {
             description: `Applied visual edit: "${prompt}"`,
+            generate_background: false,
+            background_prompt: null,
             remove_background: false,
             background_color: null,
             blur_background: false,
@@ -559,6 +561,8 @@ Analyze what visual transformations are requested and translate them into image 
 Respond ONLY with a valid JSON object matching this schema (no markdown, no thought, no explanation):
 {
   "description": "Concise 1 sentence describing what visual changes were made",
+  "generate_background": false,
+  "background_prompt": null,
   "remove_background": false,
   "background_color": null,
   "blur_background": false,
@@ -580,8 +584,10 @@ Respond ONLY with a valid JSON object matching this schema (no markdown, no thou
 }
 
 Rules:
+- "generate_background": true if user asks to add, generate, change, or place a scene, landscape, nature, or place behind the subject (e.g. hills, mountains, beach, ocean, forest, city, street, room, garden, etc.).
+- "background_prompt": A detailed English prompt describing the background scenery/landscape to generate with Flux AI (e.g. "majestic rolling green hills landscape under a picturesque sky, soft sunlight, 8k wallpaper quality, no humans") or null if not generating a scene.
 - "remove_background": true if user asks to remove background, transparent background, isolate subject, cutout, etc.
-- "background_color": hex color (e.g. "#000000" for black, "#ffffff" for white, "#ff0000" for red) if user wants to change/replace background with a specific color.
+- "background_color": hex color (e.g. "#000000" for black, "#ffffff" for white, "#ff0000" for red) if user wants to change/replace background with a specific solid color.
 - "blur_background": true if user asks for portrait mode / bokeh / blur background.
 - "style": "oil_painting" (oil painting / fine art / canvas), "cinematic" (movie teal-orange / dramatic film look), "sketch" (pencil drawing/sketch), "cartoon" (comic/anime), "cyberpunk" (neon glow), "vintage" (retro 70s), "hdr" (vibrant pop), "noir" (dramatic black and white), or null.
 - "vibe": "warm" (golden hour / sunset / warm glow), "cool" (matrix / blue chill / winter), "moody" (deep dramatic shadows), or "none".
@@ -617,12 +623,39 @@ Rules:
         // 2. Keyword fallback safety net (Guarantees 100% accuracy even if AI fails or returns generic response)
         const pLower = prompt.toLowerCase();
 
+        // Generative Scene / Landscape Background detection
+        if (pLower.includes('hill') || pLower.includes('পাহাড়') || pLower.includes('pahar')) {
+            ops.generate_background = true;
+            ops.background_prompt = ops.background_prompt || 'majestic rolling green hills landscape under a picturesque sky, soft cinematic sunlight, 8k wallpaper quality, photorealistic, no humans';
+        } else if (pLower.includes('mountain') || pLower.includes('পর্বত')) {
+            ops.generate_background = true;
+            ops.background_prompt = ops.background_prompt || 'spectacular snow-capped mountain peaks alpine landscape, dramatic blue sky, photorealistic 8k, no humans';
+        } else if (pLower.includes('beach') || pLower.includes('sea') || pLower.includes('ocean') || pLower.includes('সমুদ্র') || pLower.includes('সৈকত')) {
+            ops.generate_background = true;
+            ops.background_prompt = ops.background_prompt || 'tropical paradise beach with turquoise ocean water, white sand and palm trees, golden sunlight, 8k, no humans';
+        } else if (pLower.includes('forest') || pLower.includes('jungle') || pLower.includes('বন') || pLower.includes('জঙ্গল')) {
+            ops.generate_background = true;
+            ops.background_prompt = ops.background_prompt || 'lush green enchanted forest with sunbeams through canopy, hyperrealistic 8k, no humans';
+        } else if (pLower.includes('garden') || pLower.includes('বাগান')) {
+            ops.generate_background = true;
+            ops.background_prompt = ops.background_prompt || 'vibrant blooming flower garden with lush greenery and warm sunlight, 8k, no humans';
+        } else if (pLower.includes('city') || pLower.includes('street') || pLower.includes('শহর')) {
+            ops.generate_background = true;
+            ops.background_prompt = ops.background_prompt || 'modern futuristic city street skyline, cinematic atmosphere, 8k, no humans';
+        } else if (pLower.includes('paris') || pLower.includes('eiffel')) {
+            ops.generate_background = true;
+            ops.background_prompt = ops.background_prompt || 'beautiful Parisian street with Eiffel Tower in background, morning light, 8k, no humans';
+        }
+
         // Background removal & replacement
         if (pLower.includes('remove background') || pLower.includes('background remove') || pLower.includes('remove bg') ||
             pLower.includes('transparent') || pLower.includes('cutout') || pLower.includes('cut out') ||
             pLower.includes('ব্যাকগ্রাউন্ড রিমুভ') || pLower.includes('ব্যাকগ্রাউন্ড সরাও') || pLower.includes('ব্যাকগ্রাউন্ড ডিলিট') ||
             pLower.includes('সাদা ব্যাকগ্রাউন্ড সরাও') || pLower.includes('no background')) {
-            ops.remove_background = true;
+            // Only set remove_background if not generating a new landscape scene
+            if (!ops.generate_background) {
+                ops.remove_background = true;
+            }
         }
 
         // Background color detection
@@ -711,7 +744,7 @@ Rules:
         }
 
         // Guarantee visible change: if everything is default, apply creative visual enhancement
-        const hasCustomAction = ops.remove_background || ops.background_color || ops.blur_background ||
+        const hasCustomAction = ops.generate_background || ops.remove_background || ops.background_color || ops.blur_background ||
             ops.style || ops.vibe !== 'none' || ops.beautify || ops.grayscale || ops.sepia ||
             ops.brightness !== 1.0 || ops.saturation !== 1.0 || ops.contrast !== 1.0 ||
             ops.blur > 0 || ops.sharpen || ops.negate || ops.rotate !== 0 ||
@@ -729,6 +762,50 @@ Rules:
         let workingBuffer = buffer;
         let outMime = file.mime_type || 'image/jpeg';
         let ext = outMime.includes('png') ? 'png' : 'jpg';
+
+        // 0. Generative AI Background / Landscape (Pollinations Flux AI)
+        if (ops.generate_background && ops.background_prompt) {
+            try {
+                const bgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(ops.background_prompt)}?width=1024&height=1024&model=flux&nologo=true`;
+                const bgResp = await fetch(bgUrl);
+                if (bgResp.ok) {
+                    const bgBuffer = Buffer.from(await bgResp.arrayBuffer());
+
+                    // Check if current image is already transparent
+                    const imgMeta = await sharp(workingBuffer).metadata();
+                    let isTransparent = false;
+                    if (imgMeta.hasAlpha) {
+                        const stats = await sharp(workingBuffer).stats();
+                        if (stats.channels.length >= 4 && stats.channels[3].min < 250) {
+                            isTransparent = true;
+                        }
+                    }
+
+                    let subjectBuffer = workingBuffer;
+                    if (!isTransparent) {
+                        const bgRes = await removeBackgroundSmart(workingBuffer);
+                        subjectBuffer = bgRes.buffer;
+                    }
+
+                    // Composite subject over the newly generated background
+                    const resizedBg = await sharp(bgBuffer)
+                        .resize(imgMeta.width, imgMeta.height, { fit: 'cover' })
+                        .toBuffer();
+
+                    workingBuffer = await sharp(resizedBg)
+                        .composite([{ input: subjectBuffer, blend: 'over' }])
+                        .jpeg({ quality: 92 })
+                        .toBuffer();
+
+                    outMime = 'image/jpeg';
+                    ext = 'jpg';
+                    ops.description = `AI generated realistic landscape ("${ops.background_prompt.slice(0, 45)}...") and placed behind subject.`;
+                    ops.remove_background = false; // Background already replaced
+                }
+            } catch(bgGenErr) {
+                console.warn('[image-edit] Background generation failed:', bgGenErr.message);
+            }
+        }
 
         // A. Smart Background Removal / Replacement
         if (ops.remove_background) {
