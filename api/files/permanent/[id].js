@@ -27,7 +27,7 @@ async function checkFolderUploadAccess(userId, folderId) {
 
         if (String(folder.user_id).trim() === String(userId).trim()) return true;
 
-        const { data: user } = await supabase.from('users')
+        const { data: user } = await supabaseAdmin.from('users')
             .select('email')
             .eq('id', userId)
             .maybeSingle();
@@ -133,15 +133,23 @@ module.exports = async function handler(req, res) {
 
         if (fetchError || !file) return res.status(404).json({ error: 'File not found' });
 
-        // Extract relative path from public URL
-        const parts = file.file_path.split('/userfiles/');
-        if (parts.length > 1) {
-            const storagePath = parts[1];
-            await supabaseAdmin.storage.from('userfiles').remove([storagePath]);
+        // Extract relative path from public URL and remove from Supabase storage
+        try {
+            const parts = file.file_path ? file.file_path.split('/userfiles/') : [];
+            if (parts.length > 1) {
+                const storagePath = parts[1];
+                await supabaseAdmin.storage.from('userfiles').remove([storagePath]);
+            }
+        } catch(storageErr) {
+            console.warn('[permanent] Storage remove warning:', storageErr.message);
         }
 
         // Delete DB record
-        await supabaseAdmin.from('files').delete().eq('id', id);
+        const { error: delErr } = await supabaseAdmin.from('files').delete().eq('id', id);
+        if (delErr) {
+            console.error('[permanent] DB delete error:', delErr);
+            return res.status(500).json({ error: 'Failed to delete file record' });
+        }
 
         res.json({ success: true });
     } catch (err) {

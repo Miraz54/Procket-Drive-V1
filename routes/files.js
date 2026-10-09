@@ -418,6 +418,110 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
     });
 });
 
+// Signed upload URL generator (enables direct browser-to-Supabase upload, bypassing proxy limits)
+router.post('/signed-upload', requireAuth, async (req, res) => {
+    const userId = req.session?.userId || req.userId || verifyToken(req);
+    try {
+        const { filename, mimeType, folder_id } = req.body || {};
+        if (!filename) return res.status(400).json({ error: 'Filename is required' });
+
+        const safetyCheck = validateFileSafety(filename);
+        if (!safetyCheck.allowed) {
+            return res.status(400).json({ error: safetyCheck.reason });
+        }
+
+        const validFolderId = (folder_id && folder_id !== 'null' && folder_id !== 'undefined') ? folder_id : null;
+        let storageOwnerId = userId;
+
+        if (validFolderId) {
+            try {
+                const { data: folderRow } = await supabaseAdmin.from('folders')
+                    .select('user_id')
+                    .eq('id', validFolderId)
+                    .maybeSingle();
+                if (folderRow && folderRow.user_id) {
+                    storageOwnerId = folderRow.user_id;
+                }
+            } catch(e) {}
+        }
+
+        const safeName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+        const filePath = `${storageOwnerId}/${safeName}`;
+
+        const { data: signedData, error: signErr } = await supabaseAdmin.storage
+            .from('userfiles')
+            .createSignedUploadUrl(filePath);
+
+        if (signErr || !signedData) {
+            console.error('[signed-upload] Error:', signErr);
+            return res.status(500).json({ error: 'Failed to create upload URL' });
+        }
+
+        const { data: urlData } = supabaseAdmin.storage.from('userfiles').getPublicUrl(filePath);
+
+        res.json({
+            success: true,
+            signedUrl: signedData.signedUrl,
+            token: signedData.token,
+            filePath,
+            publicUrl: urlData.publicUrl,
+            safeName
+        });
+    } catch(err) {
+        console.error('[signed-upload] Catch error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Save metadata after direct client-to-storage upload
+router.post('/save-meta', requireAuth, async (req, res) => {
+    const userId = req.session?.userId || req.userId || verifyToken(req);
+    try {
+        const { original_name, file_path, file_size, mime_type, folder_id } = req.body || {};
+        if (!original_name || !file_path) {
+            return res.status(400).json({ error: 'Missing file details' });
+        }
+
+        const validFolderId = (folder_id && folder_id !== 'null' && folder_id !== 'undefined') ? folder_id : null;
+
+        const { data: inserted, error: dbError } = await supabaseAdmin
+            .from('files')
+            .insert([{
+                user_id: userId,
+                original_name,
+                file_path,
+                file_size: Number(file_size) || 0,
+                mime_type: mime_type || 'application/octet-stream',
+                folder_id: validFolderId,
+                is_deleted: 0
+            }])
+            .select()
+            .single();
+
+        if (dbError) {
+            console.error('[save-meta] DB error:', dbError);
+            return res.status(500).json({ error: 'Database insert failed' });
+        }
+
+        invalidateUserCaches(userId, inserted.id);
+
+        res.json({
+            success: true,
+            file: {
+                id: inserted.id,
+                name: original_name,
+                size: inserted.file_size,
+                type: inserted.mime_type,
+                uploaded_at: inserted.uploaded_at,
+                folder_id: validFolderId
+            }
+        });
+    } catch(err) {
+        console.error('[save-meta] Catch error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 
 
 // List files (optionally filtered by folder_id)
@@ -453,9 +557,10 @@ router.get('/list', requireAuth, async (req, res) => {
 
 // Trash list
 router.get('/trash', requireAuth, async (req, res) => {
-    const { data, error } = await supabase.from('files').select('*').eq('user_id', req.session.userId).eq('is_deleted', 1).order('deleted_at', { ascending: false });
+    const userId = req.session?.userId || req.userId || verifyToken(req);
+    const { data, error } = await supabaseAdmin.from('files').select('*').eq('user_id', userId).eq('is_deleted', 1).order('deleted_at', { ascending: false });
     if (error) return res.status(500).json({ error: 'Failed' });
-    res.json(data.map(f => ({ id: f.id, name: f.original_name, size: Number(f.file_size) || 0, type: f.mime_type, deleted_at: f.deleted_at })));
+    res.json((data || []).map(f => ({ id: f.id, name: f.original_name, size: Number(f.file_size) || 0, type: f.mime_type, deleted_at: f.deleted_at })));
 });
 
 // Move to trash
@@ -490,7 +595,7 @@ router.post('/restore/:id', requireAuth, async (req, res) => {
 
 // Permanent delete
 router.delete('/permanent/:id', requireAuth, async (req, res) => {
-    const userId = req.session.userId;
+    const userId = req.session?.userId || req.userId || verifyToken(req);
     const hasAccess = await canUserModifyFile(userId, req.params.id);
     if (!hasAccess) return res.status(403).json({ error: 'You do not have permission to delete this file' });
 
@@ -501,10 +606,14 @@ router.delete('/permanent/:id', requireAuth, async (req, res) => {
 
     if (fetchError || !file) return res.status(404).json({ error: 'File not found' });
     
-    const storagePath = file.file_path.split('/').slice(file.file_path.split('/').indexOf('userfiles') + 1).join('/');
-    
-    // Remove from Supabase storage using admin client to bypass Storage RLS
-    await supabaseAdmin.storage.from('userfiles').remove([storagePath]);
+    try {
+        const parts = file.file_path ? file.file_path.split('/userfiles/') : [];
+        if (parts.length > 1) {
+            await supabaseAdmin.storage.from('userfiles').remove([parts[1]]);
+        }
+    } catch(storageErr) {
+        console.warn('[permanent] Storage remove warning:', storageErr.message);
+    }
     
     // Delete database record using admin client to bypass Database RLS
     const { error: deleteError } = await supabaseAdmin.from('files').delete().eq('id', req.params.id);

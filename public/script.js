@@ -493,21 +493,13 @@ async function uploadFile(input) {
     proceedUpload(file, input);
 }
 
-function proceedUpload(file, input) {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Only send folder_id if user is currently inside an actual folder or shared folder
+async function proceedUpload(file, input) {
     const isSharedView = window.location.pathname.includes('/shared-folder/') || activeNav === 'shared';
     if (!isSharedView) {
         sharedFolderId = null; // Clean up so it never leaks into My Drive
     }
     const targetFolderId = isSharedView ? (sharedFolderId || currentFolderId) : currentFolderId;
-    if (targetFolderId && targetFolderId !== 'null' && targetFolderId !== 'undefined') {
-        formData.append('folder_id', targetFolderId);
-    }
 
-    const xhr              = new XMLHttpRequest();
     const progressWrap     = document.getElementById('uploadProgressContainer');
     const progressBar      = document.getElementById('uploadProgressBar');
     const progressPct      = document.getElementById('uploadProgressPercent');
@@ -518,41 +510,7 @@ function proceedUpload(file, input) {
     if (progressPct)      progressPct.textContent    = '0%';
     if (progressFilename) progressFilename.textContent = file.name;
 
-    let processingTimer = null;
-
-    xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-            // Reserve 0-85% for raw network transfer, 85-99% for cloud processing, 100% only on complete
-            const rawPct = Math.round((e.loaded / e.total) * 100);
-            const displayPct = Math.min(85, Math.round((e.loaded / e.total) * 85));
-
-            if (rawPct < 100) {
-                if (progressBar) progressBar.style.width = displayPct + '%';
-                if (progressPct) progressPct.textContent  = displayPct + '%';
-            } else {
-                // Network send complete -> Server & Supabase storage transfer
-                if (progressBar) {
-                    progressBar.style.width = '90%';
-                    progressBar.classList.add('upload-processing');
-                }
-                if (progressPct) {
-                    progressPct.innerHTML = '<i class="fas fa-cloud-upload-alt fa-fade"></i> Cloud saving…';
-                }
-                if (!processingTimer) {
-                    processingTimer = setTimeout(() => {
-                        if (progressBar && progressBar.classList.contains('upload-processing')) {
-                            progressBar.style.width = '96%';
-                            if (progressPct) progressPct.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finalizing…';
-                        }
-                    }, 2500);
-                }
-            }
-        }
-    });
-
-    xhr.onload = () => {
-        if (processingTimer) clearTimeout(processingTimer);
-        // Set to 100% on complete
+    const onUploadSuccess = () => {
         if (progressBar) {
             progressBar.style.width = '100%';
             progressBar.classList.remove('upload-processing');
@@ -567,51 +525,131 @@ function proceedUpload(file, input) {
                 progressWrap.style.transition = '';
             }, 300);
         }
-        let response = null;
-        try {
-            response = JSON.parse(xhr.responseText);
-        } catch (e) {}
-
-        if (xhr.status === 200 && response && response.success) {
-            if (response.is_duplicate) {
-                showToast(`⚠️ ${file.name} uploaded (Warning: duplicate file in this folder)`, 'warning', 6000);
-            } else {
-                showToast(`✅ ${file.name} uploaded!`, 'success');
-            }
-            
-            // Check if currently inside a shared folder view
-            const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
-            if (sharedMatch) {
-                const token = sharedMatch[1];
-                fetch('/api/auth/me', { credentials: 'include' })
-                    .then(res => res.json())
-                    .then(userData => {
-                        showSharedFolderLoggedIn(token, userData);
-                    });
-            } else {
-                // Optimistic storage update immediately
-                const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) + file.size;
-                updateStorageUI(localUsed, allFiles.length + 1);
-                loadFiles(); // refresh (also calls loadStorageStats)
-            }
+        showToast(`✅ ${file.name} uploaded!`, 'success');
+        
+        const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
+        if (sharedMatch) {
+            const token = sharedMatch[1];
+            fetch('/api/auth/me', { credentials: 'include' })
+                .then(res => res.json())
+                .then(userData => {
+                    showSharedFolderLoggedIn(token, userData);
+                });
         } else {
-            const errorMsg = (response && response.error) || `Upload failed (${xhr.status || 'Server error'})`;
-            showToast(errorMsg, 'error', 6000);
+            const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) + file.size;
+            updateStorageUI(localUsed, allFiles.length + 1);
+            loadFiles();
         }
     };
-    xhr.onerror = () => {
-        if (processingTimer) clearTimeout(processingTimer);
+
+    const onUploadError = (msg) => {
         if (progressBar) progressBar.classList.remove('upload-processing');
         if (progressWrap) progressWrap.style.display = 'none';
-        showToast('Upload failed. Network error.', 'error');
-    };
-    xhr.ontimeout = () => {
-        if (processingTimer) clearTimeout(processingTimer);
-        if (progressBar) progressBar.classList.remove('upload-processing');
-        if (progressWrap) progressWrap.style.display = 'none';
-        showToast('Upload timed out. Please check your internet connection.', 'error');
+        showToast(msg || 'Upload failed', 'error', 6000);
     };
 
+    // Try direct signed upload first (bypasses Vercel 4.5MB limit entirely & uploads directly to Supabase S3)
+    try {
+        const signRes = await fetch('/api/files/signed-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                filename: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                folder_id: targetFolderId
+            })
+        });
+
+        const signData = await signRes.json();
+        if (signRes.ok && signData && signData.signedUrl) {
+            const xhr = new XMLHttpRequest();
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const pct = Math.round((e.loaded / e.total) * 98);
+                    if (progressBar) progressBar.style.width = pct + '%';
+                    if (progressPct) progressPct.textContent  = pct + '%';
+                    if (pct >= 95) {
+                        if (progressBar) progressBar.classList.add('upload-processing');
+                        if (progressPct) progressPct.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+                    }
+                }
+            });
+
+            xhr.onload = async () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const metaRes = await fetch('/api/files/save-meta', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({
+                                original_name: file.name,
+                                file_path: signData.publicUrl,
+                                file_size: file.size,
+                                mime_type: file.type,
+                                folder_id: targetFolderId
+                            })
+                        });
+                        const metaData = await metaRes.json();
+                        if (metaRes.ok && metaData && metaData.success) {
+                            onUploadSuccess();
+                        } else {
+                            onUploadError(metaData.error || 'Failed to save file record');
+                        }
+                    } catch(err) {
+                        onUploadError('Failed to record uploaded file');
+                    }
+                } else {
+                    onUploadError(`Direct storage upload failed (${xhr.status})`);
+                }
+            };
+
+            xhr.onerror = () => onUploadError('Network error uploading to storage');
+            xhr.ontimeout = () => onUploadError('Upload timed out');
+            xhr.timeout = 300000;
+            xhr.open('PUT', signData.signedUrl, true);
+            xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+            xhr.send(file);
+            if (input) input.value = '';
+            return;
+        }
+    } catch(err) {
+        console.warn('Direct upload setup failed, falling back to standard upload:', err);
+    }
+
+    // Fallback: standard multipart upload
+    const formData = new FormData();
+    formData.append('file', file);
+    if (targetFolderId && targetFolderId !== 'null' && targetFolderId !== 'undefined') {
+        formData.append('folder_id', targetFolderId);
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 95);
+            if (progressBar) progressBar.style.width = pct + '%';
+            if (progressPct) progressPct.textContent  = pct + '%';
+            if (pct >= 90) {
+                if (progressBar) progressBar.classList.add('upload-processing');
+                if (progressPct) progressPct.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finalizing…';
+            }
+        }
+    });
+
+    xhr.onload = () => {
+        let response = null;
+        try { response = JSON.parse(xhr.responseText); } catch (e) {}
+        if (xhr.status === 200 && response && response.success) {
+            onUploadSuccess();
+        } else {
+            const errorMsg = (response && response.error) || `Upload failed (${xhr.status || 'Server error'})`;
+            onUploadError(errorMsg);
+        }
+    };
+    xhr.onerror = () => onUploadError('Upload failed. Network error.');
+    xhr.ontimeout = () => onUploadError('Upload timed out.');
     xhr.timeout = 180000;
     xhr.open('POST', '/api/files/upload', true);
     xhr.send(formData);
@@ -1682,22 +1720,43 @@ async function trashDeleteSelected() {
     if (chks.length === 0) return;
     const proceed = await showConfirmDialog('Delete Selected Forever ⚠️', `Permanently delete ${chks.length} file(s)? This cannot be undone.`, true);
     if (!proceed) return;
-    let deleted = 0;
-    for (const chk of chks) {
-        const id = Number(chk.dataset.id);
+
+    const btn = document.getElementById('trashDeleteSelectedBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+    }
+
+    const deletePromises = chks.map(async (chk) => {
+        const id = String(chk.dataset.id);
+        const row = document.getElementById(`trash-row-${id}`);
+        if (row) row.style.opacity = '0.3';
         try {
             const res = await fetch(`/api/files/permanent/${id}`, { method: 'DELETE', credentials: 'include' });
             if (res.ok) {
-                // optimistic: remove from DOM and state
-                const row = document.getElementById(`trash-row-${id}`);
                 if (row) row.remove();
-                _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
-                deleted++;
+                _trashFiles = _trashFiles.filter(f => String(f.id) !== id);
+                return true;
+            } else {
+                if (row) row.style.opacity = '1';
+                return false;
             }
-        } catch(e) {}
+        } catch(e) {
+            if (row) row.style.opacity = '1';
+            return false;
+        }
+    });
+
+    const results = await Promise.all(deletePromises);
+    const deletedCount = results.filter(Boolean).length;
+
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete Selected';
     }
-    if (deleted > 0) {
-        showToast(`${deleted} file(s) permanently deleted`, 'success');
+
+    if (deletedCount > 0) {
+        showToast(`${deletedCount} file(s) permanently deleted`, 'success');
         loadStorageStats();
         if (_trashFiles.length === 0) {
             const container = document.getElementById('trashList');
@@ -1707,6 +1766,8 @@ async function trashDeleteSelected() {
         } else {
             _onTrashCheckChange();
         }
+    } else {
+        showToast('Delete failed. Please try again.', 'error');
     }
 }
 
@@ -1717,50 +1778,64 @@ async function restoreFile(id, btnEl) {
     // Optimistic: remove from DOM immediately
     const row = document.getElementById(`trash-row-${id}`);
     if (row) row.style.opacity = '0.4';
-    const res = await fetch(`/api/files/restore/${id}`, { method:'POST', credentials: 'include' });
-    if (res.ok) {
-        // Remove from internal state and DOM
-        _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
-        if (row) row.remove();
-        showToast('File restored!', 'success');
-        loadFiles();
-        loadStorageStats();
-        if (_trashFiles.length === 0) {
-            const container = document.getElementById('trashList');
-            const selectAllBar = document.getElementById('trashSelectBar');
-            if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
-            if (selectAllBar) selectAllBar.style.display = 'none';
+    if (btnEl) btnEl.disabled = true;
+    try {
+        const res = await fetch(`/api/files/restore/${id}`, { method:'POST', credentials: 'include' });
+        if (res.ok) {
+            // Remove from internal state and DOM
+            _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
+            if (row) row.remove();
+            showToast('File restored!', 'success');
+            loadFiles();
+            loadStorageStats();
+            if (_trashFiles.length === 0) {
+                const container = document.getElementById('trashList');
+                const selectAllBar = document.getElementById('trashSelectBar');
+                if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
+                if (selectAllBar) selectAllBar.style.display = 'none';
+            }
+        } else {
+            if (row) row.style.opacity = '1';
+            if (btnEl) btnEl.disabled = false;
+            showToast('Restore failed', 'error');
         }
-    } else {
+    } catch(e) {
         if (row) row.style.opacity = '1';
-        showToast('Restore failed', 'error');
+        if (btnEl) btnEl.disabled = false;
+        showToast('Restore failed: Network error', 'error');
     }
 }
 
 async function permanentDeleteFile(id, btnEl) {
     const proceed = await showConfirmDialog('Delete Forever ⚠️', 'This file will be permanently deleted. This action cannot be undone. Are you sure?', true);
     if (!proceed) return;
-    // Optimistic: fade out row
     const row = document.getElementById(`trash-row-${id}`);
-    if (row) row.style.opacity = '0.4';
-    const res = await fetch(`/api/files/permanent/${id}`, { method:'DELETE', credentials: 'include' });
-    if (res.ok) {
-        // Remove from internal state and DOM
-        _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
-        if (row) row.remove();
-        showToast('Permanently deleted', 'success');
-        loadStorageStats();
-        if (_trashFiles.length === 0) {
-            const container = document.getElementById('trashList');
-            const selectAllBar = document.getElementById('trashSelectBar');
-            if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
-            if (selectAllBar) selectAllBar.style.display = 'none';
+    if (row) row.style.opacity = '0.3';
+    if (btnEl) btnEl.disabled = true;
+    try {
+        const res = await fetch(`/api/files/permanent/${id}`, { method:'DELETE', credentials: 'include' });
+        if (res.ok) {
+            _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
+            if (row) row.remove();
+            showToast('Permanently deleted', 'success');
+            loadStorageStats();
+            if (_trashFiles.length === 0) {
+                const container = document.getElementById('trashList');
+                const selectAllBar = document.getElementById('trashSelectBar');
+                if (container) container.innerHTML = '<div class="empty-state" style="min-height:160px;"><div class="empty-state-icon"><i class="fas fa-trash-alt"></i></div><p>Trash is empty</p></div>';
+                if (selectAllBar) selectAllBar.style.display = 'none';
+            } else {
+                _onTrashCheckChange();
+            }
         } else {
-            _onTrashCheckChange();
+            if (row) row.style.opacity = '1';
+            if (btnEl) btnEl.disabled = false;
+            showToast('Delete failed', 'error');
         }
-    } else {
+    } catch(e) {
         if (row) row.style.opacity = '1';
-        showToast('Delete failed', 'error');
+        if (btnEl) btnEl.disabled = false;
+        showToast('Delete failed: Network error', 'error');
     }
 }
 
@@ -2182,25 +2257,26 @@ function showConfirmDialog(title, message, isDanger = true) {
 
         openModal('confirmModal');
 
-        const onYes = () => {
+        let settled = false;
+        const done = (val) => {
+            if (settled) return;
+            settled = true;
             closeModal('confirmModal');
-            cleanup();
-            resolve(true);
-        };
-
-        const onCancel = () => {
-            closeModal('confirmModal');
-            cleanup();
-            resolve(false);
-        };
-
-        const cleanup = () => {
             yesBtn.removeEventListener('click', onYes);
             cancelBtn.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onBackdrop);
+            resolve(val);
         };
 
-        yesBtn.addEventListener('click', onYes);
-        cancelBtn.addEventListener('click', onCancel);
+        const onYes = () => done(true);
+        const onCancel = () => done(false);
+        const onBackdrop = (e) => {
+            if (e.target === modal) done(false);
+        };
+
+        yesBtn.addEventListener('click', onYes, { once: true });
+        cancelBtn.addEventListener('click', onCancel, { once: true });
+        modal.addEventListener('click', onBackdrop, { once: true });
     });
 }
 

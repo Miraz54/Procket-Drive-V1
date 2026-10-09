@@ -1,5 +1,10 @@
+const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../../lib/supabase');
 const { requireAuth } = require('../../lib/auth');
+
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    : supabase;
 
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
@@ -18,7 +23,7 @@ module.exports = async function handler(req, res) {
     if (!userId) return;
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('files')
             .select('id, original_name, file_size, mime_type, deleted_at')
             .eq('user_id', userId)
