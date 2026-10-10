@@ -26,12 +26,12 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 // ── Gemini API helper with automatic fallback & retry ─────────────
 const GEMINI_MODELS = [
+    'gemini-flash-latest',
     'gemini-3.8-flash',
     'gemini-3.6-flash',
     'gemini-3.7-flash',
     'gemini-3.5-flash',
-    'gemini-3.1-flash-lite',
-    'gemini-flash-latest'
+    'gemini-3.1-flash-lite'
 ];
 
 async function callGemini(preferredModel, contents) {
@@ -476,7 +476,7 @@ router.post('/summarize', requireAuth, async (req, res) => {
             : documentText;
 
         // Call Gemini for summarization
-        const geminiRes = await callGemini('gemini-3.6-flash', [
+        const geminiRes = await callGemini('gemini-flash-latest', [
             {
                 role: 'user',
                 parts: [{
