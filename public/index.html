@@ -603,18 +603,6 @@
                         <i class="fas fa-chevron-right ai-tool-arrow"></i>
                     </div>
 
-                    <!-- AI Image Editor -->
-                    <div class="ai-tool-card" onclick="openAIImageEditorModal()">
-                        <div class="ai-tool-icon" style="background: linear-gradient(135deg,#8b5cf6,#ec4899);">
-                            <i class="fas fa-magic"></i>
-                        </div>
-                        <div class="ai-tool-info">
-                            <div class="ai-tool-name">AI Image Editor</div>
-                            <div class="ai-tool-desc">Edit images with a text prompt</div>
-                        </div>
-                        <i class="fas fa-chevron-right ai-tool-arrow"></i>
-                    </div>
-
                     <!-- OCR -->
                     <div class="ai-tool-card" onclick="openOCRModal()">
                         <div class="ai-tool-icon" style="background: linear-gradient(135deg,#3b82f6,#6366f1);">
@@ -683,73 +671,6 @@
                     <button class="btn-secondary" onclick="closeConvertModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
                     <button class="btn-primary" onclick="doConvert()" id="convertBtn" style="flex:1;margin:0;border-radius:12px;">
                         <i class="fas fa-magic"></i> Convert to PDF
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- AI Image Editor Modal -->
-    <div id="aiImageEditorModal" class="modal">
-        <div class="modal-content" style="max-width:520px;">
-            <div class="modal-header" style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(236,72,153,0.15));">
-                <h3><i class="fas fa-magic" style="color:#8b5cf6;"></i> AI Image Editor</h3>
-                <button class="modal-close-btn" onclick="closeAIImageEditorModal()"><i class="fas fa-times"></i></button>
-            </div>
-            <div style="padding:24px;">
-                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Select an image from your Drive and describe the changes you want to make.</p>
-
-                <div class="field-label">Select Image from Drive</div>
-                <div class="ai-file-picker" id="imageEditFilePicker">
-                    <div class="ai-file-picker-placeholder" id="imageEditFilePickerPlaceholder">
-                        <i class="fas fa-mouse-pointer"></i>
-                        <span>Click to pick an image</span>
-                    </div>
-                    <div class="ai-selected-file" id="imageEditSelectedFile" style="display:none;">
-                        <div class="ai-selected-file-thumb" id="imageEditSelectedThumb">
-                            <i class="fas fa-image" style="color:#8b5cf6;"></i>
-                        </div>
-                        <div class="ai-selected-file-details">
-                            <span class="ai-selected-file-name" id="imageEditSelectedName">-</span>
-                            <span class="ai-selected-file-meta" id="imageEditSelectedMeta">-</span>
-                        </div>
-                        <button onclick="clearImageEditFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
-                    </div>
-                </div>
-                <input type="hidden" id="imageEditFileId">
-
-                <!-- Image preview -->
-                <div id="imageEditPreview" style="display:none;margin:12px 0;border-radius:10px;overflow:hidden;max-height:200px;background:var(--bg-card);border:1px solid var(--border);">
-                    <img id="imageEditPreviewImg" src="" alt="Preview" style="width:100%;max-height:200px;object-fit:contain;">
-                </div>
-
-                <div class="field-label" style="margin-top:16px;">Edit Prompt</div>
-                <div class="input-group">
-                    <i class="fas fa-pencil-alt"></i>
-                    <input type="text" id="imageEditPrompt" placeholder="e.g. Remove background, pencil sketch, cartoon, vintage…">
-                </div>
-                <!-- Quick Prompt Presets -->
-                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
-                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Remove background')">🪄 Remove Background</button>
-                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Pencil sketch')">🎨 Pencil Sketch</button>
-                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Cartoon art')">✨ Cartoon Art</button>
-                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Cyberpunk neon')">🌆 Cyberpunk</button>
-                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Vintage retro')">📸 Vintage</button>
-                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Vibrant HDR')">☀️ Vibrant HDR</button>
-                    <button type="button" class="btn-secondary btn-small" style="font-size:0.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;" onclick="setEditPrompt('Black and white')">⚫ B&amp;W</button>
-                </div>
-
-                <div class="field-label" style="margin-top:12px;">Save edited image to folder</div>
-                <select id="imageEditTargetFolder" class="ai-select">
-                    <option value="">Root (My Drive)</option>
-                </select>
-
-                <div id="imageEditResult" class="ai-result-box" style="display:none;"></div>
-
-                <div style="display:flex;gap:10px;margin-top:20px;">
-                    <button class="btn-secondary" onclick="closeAIImageEditorModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
-                    <button class="btn-primary" onclick="doAIImageEdit()" id="imageEditBtn" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#ec4899);">
-                        <i class="fas fa-magic"></i> Apply AI Edit
                     </button>
                 </div>
             </div>
