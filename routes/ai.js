@@ -362,6 +362,9 @@ router.post('/convert', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 // 3. OCR — Tesseract.js text extraction from image/PDF
 // POST /api/ai/ocr
+// ══════════════════════════════════════════════════════════════════
+// 3. OCR — Text extraction from image/PDF (Tesseract + Gemini Fallback)
+// POST /api/ai/ocr
 // Body: { fileId, saveToDrive?, targetFolderId? }
 // ══════════════════════════════════════════════════════════════════
 router.post('/ocr', requireAuth, async (req, res) => {
@@ -371,28 +374,76 @@ router.post('/ocr', requireAuth, async (req, res) => {
 
         const { buffer, file } = await fetchFileBuffer(fileId);
         const mime = file.mime_type || '';
+        const name = (file.original_name || '').toLowerCase();
 
         let extractedText = '';
 
-        if (mime.startsWith('image/')) {
-            // Use Tesseract.js for image OCR
-            const { createWorker } = require('tesseract.js');
-            const worker = await createWorker('eng');
+        if (mime.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|tiff?)$/i.test(name)) {
+            // 1. Primary: Use Tesseract.js for image OCR
             try {
-                const { data: { text } } = await worker.recognize(buffer);
-                extractedText = text.trim();
-            } finally {
-                await worker.terminate();
+                const { createWorker } = require('tesseract.js');
+                const worker = await createWorker('eng');
+                try {
+                    const { data: { text } } = await worker.recognize(buffer);
+                    extractedText = (text || '').trim();
+                } finally {
+                    await worker.terminate();
+                }
+            } catch (tessErr) {
+                console.warn('[ocr] Tesseract failed, falling back to Gemini Vision OCR:', tessErr.message);
             }
-        } else if (mime === 'application/pdf' || file.original_name.toLowerCase().endsWith('.pdf')) {
-            // Use extractPdfText helper to extract text from PDF
+
+            // 2. Fallback: If Tesseract got little/no text, use Gemini Vision
+            if (!extractedText || extractedText.length < 15) {
+                try {
+                    const base64Img = buffer.toString('base64');
+                    const imgMime = mime.startsWith('image/') ? mime : 'image/jpeg';
+                    const geminiRes = await callGemini('gemini-flash-latest', [
+                        {
+                            role: 'user',
+                            parts: [
+                                { inlineData: { mimeType: imgMime, data: base64Img } },
+                                { text: 'Extract all legible text from this image exactly as written. Return ONLY the extracted text, with no preamble, formatting wrappers, or additional commentary.' }
+                            ]
+                        }
+                    ]);
+                    const parts = geminiRes.candidates?.[0]?.content?.parts || [];
+                    const textPart = parts.find(p => p.text && !p.thought) || parts.find(p => p.text) || parts[0];
+                    if (textPart && textPart.text) {
+                        extractedText = textPart.text.trim();
+                    }
+                } catch(gErr) {
+                    console.warn('[ocr] Gemini Vision OCR fallback error:', gErr.message);
+                }
+            }
+        } else if (mime === 'application/pdf' || name.endsWith('.pdf')) {
+            // 1. Primary: Extract embedded digital text from PDF
             extractedText = await extractPdfText(buffer);
 
-            if (!extractedText) {
-                return res.status(400).json({ error: 'This PDF appears to be a scanned image PDF. Please use an image-based OCR tool.' });
+            // 2. Fallback: If scanned / image-only PDF, use Gemini Multimodal OCR
+            if (!extractedText || extractedText.length < 20) {
+                try {
+                    const base64Pdf = buffer.toString('base64');
+                    const geminiRes = await callGemini('gemini-flash-latest', [
+                        {
+                            role: 'user',
+                            parts: [
+                                { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+                                { text: 'Extract all legible text from this scanned PDF document exactly as written. Return ONLY the raw extracted text without any commentary or explanation.' }
+                            ]
+                        }
+                    ]);
+                    const parts = geminiRes.candidates?.[0]?.content?.parts || [];
+                    const textPart = parts.find(p => p.text && !p.thought) || parts.find(p => p.text) || parts[0];
+                    if (textPart && textPart.text) {
+                        extractedText = textPart.text.trim();
+                    }
+                } catch(pdfGeminiErr) {
+                    console.warn('[ocr] Gemini PDF multimodal OCR error:', pdfGeminiErr.message);
+                }
             }
         } else {
-            return res.status(400).json({ error: 'OCR supports image files (JPG, PNG, etc.) and text-based PDFs.' });
+            return res.status(400).json({ error: 'OCR supports image files (JPG, PNG, WebP) and PDF documents.' });
         }
 
         if (!extractedText) {
@@ -425,7 +476,7 @@ router.post('/ocr', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════
-// 5. DOCUMENT SUMMARY — Gemini text summarization
+// 5. DOCUMENT SUMMARY — Gemini AI Text & Scanned PDF Summarization
 // POST /api/ai/summarize
 // Body: { fileId, saveToDrive?, targetFolderId? }
 // ══════════════════════════════════════════════════════════════════
@@ -436,78 +487,175 @@ router.post('/summarize', requireAuth, async (req, res) => {
 
         const { buffer, file } = await fetchFileBuffer(fileId);
         const mime = file.mime_type || '';
-        const name = file.original_name || '';
+        const name = (file.original_name || '').toLowerCase();
 
-        let documentText = '';
+        let geminiContents = [];
+        let originalLength = 0;
 
-        // Extract text from PDF
-        if (mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
-            documentText = await extractPdfText(buffer);
-            if (!documentText) {
-                return res.status(400).json({ error: 'Could not extract text from this PDF. It may be a scanned/image PDF.' });
+        // 1. PDF Document Handling
+        if (mime === 'application/pdf' || name.endsWith('.pdf')) {
+            const extractedText = await extractPdfText(buffer);
+            if (extractedText && extractedText.length >= 50) {
+                // Text-based PDF: send truncated text
+                originalLength = extractedText.length;
+                const truncatedText = extractedText.length > 30000
+                    ? extractedText.substring(0, 30000) + '\n\n[... document truncated for summarization ...]'
+                    : extractedText;
+                geminiContents = [{
+                    role: 'user',
+                    parts: [{
+                        text: `Please provide a comprehensive summary of the following document.
+Structure your summary with:
+1. **Main Topic** (1-2 sentences)
+2. **Key Points** (bullet points)
+3. **Conclusion** (1-2 sentences)
+
+Document:
+---
+${truncatedText}
+---
+
+Provide the summary clearly formatted.`
+                    }]
+                }];
+            } else {
+                // Scanned / Image-only PDF: send via Multimodal inlineData
+                originalLength = buffer.length;
+                const base64Pdf = buffer.toString('base64');
+                geminiContents = [{
+                    role: 'user',
+                    parts: [
+                        { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+                        {
+                            text: `Please read this scanned PDF document and provide a comprehensive summary.
+Structure your summary with:
+1. **Main Topic** (1-2 sentences)
+2. **Key Points** (bullet points)
+3. **Conclusion** (1-2 sentences)
+
+Provide the summary clearly formatted.`
+                        }
+                    ]
+                }];
             }
         }
-        // Extract text from DOCX
+        // 2. DOCX Document Handling
         else if (
             mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
             mime === 'application/msword' ||
-            name.toLowerCase().endsWith('.docx') ||
-            name.toLowerCase().endsWith('.doc')
+            name.endsWith('.docx') ||
+            name.endsWith('.doc')
         ) {
             const mammoth = require('mammoth');
             const result = await mammoth.extractRawText({ buffer });
-            documentText = result.value.trim();
-        }
-        // Plain text
-        else if (mime === 'text/plain' || name.toLowerCase().endsWith('.txt')) {
-            documentText = buffer.toString('utf-8').trim();
-        }
-        else {
-            return res.status(400).json({ error: 'Document Summary supports PDF, DOCX, and TXT files.' });
-        }
-
-        if (!documentText || documentText.length < 50) {
-            return res.status(400).json({ error: 'The document has too little text to summarize.' });
-        }
-
-        // Truncate to avoid Gemini token limit (~30,000 chars max)
-        const truncatedText = documentText.length > 30000
-            ? documentText.substring(0, 30000) + '\n\n[... document truncated for summarization ...]'
-            : documentText;
-
-        // Call Gemini for summarization
-        const geminiRes = await callGemini('gemini-flash-latest', [
-            {
+            const documentText = (result.value || '').trim();
+            if (!documentText || documentText.length < 30) {
+                return res.status(400).json({ error: 'The document has too little text to summarize.' });
+            }
+            originalLength = documentText.length;
+            const truncatedText = documentText.length > 30000
+                ? documentText.substring(0, 30000) + '\n\n[... document truncated for summarization ...]'
+                : documentText;
+            geminiContents = [{
                 role: 'user',
                 parts: [{
-                    text: `Please provide a comprehensive summary of the following document. 
-                    Structure your summary with:
-                    1. **Main Topic** (1-2 sentences)
-                    2. **Key Points** (bullet points)
-                    3. **Conclusion** (1-2 sentences)
-                    
-                    Document:
-                    ---
-                    ${truncatedText}
-                    ---
-                    
-                    Provide the summary in English, clearly formatted.`
+                    text: `Please provide a comprehensive summary of the following document.
+Structure your summary with:
+1. **Main Topic** (1-2 sentences)
+2. **Key Points** (bullet points)
+3. **Conclusion** (1-2 sentences)
+
+Document:
+---
+${truncatedText}
+---
+
+Provide the summary clearly formatted.`
                 }]
+            }];
+        }
+        // 3. Plain Text / Markdown / Code / JSON / CSV
+        else if (
+            mime.startsWith('text/') ||
+            mime === 'application/json' ||
+            name.endsWith('.txt') ||
+            name.endsWith('.md') ||
+            name.endsWith('.csv') ||
+            name.endsWith('.json') ||
+            name.endsWith('.js') ||
+            name.endsWith('.py') ||
+            name.endsWith('.html')
+        ) {
+            const documentText = buffer.toString('utf-8').trim();
+            if (!documentText || documentText.length < 20) {
+                return res.status(400).json({ error: 'The document has too little text to summarize.' });
             }
-        ]);
+            originalLength = documentText.length;
+            const truncatedText = documentText.length > 30000
+                ? documentText.substring(0, 30000) + '\n\n[... document truncated for summarization ...]'
+                : documentText;
+            geminiContents = [{
+                role: 'user',
+                parts: [{
+                    text: `Please provide a comprehensive summary of the following document.
+Structure your summary with:
+1. **Main Topic** (1-2 sentences)
+2. **Key Points** (bullet points)
+3. **Conclusion** (1-2 sentences)
+
+Document:
+---
+${truncatedText}
+---
+
+Provide the summary clearly formatted.`
+                }]
+            }];
+        }
+        // 4. Image Document (Photo of note / receipt / slide / certificate)
+        else if (mime.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(name)) {
+            originalLength = buffer.length;
+            const base64Img = buffer.toString('base64');
+            const imgMime = mime.startsWith('image/') ? mime : 'image/jpeg';
+            geminiContents = [{
+                role: 'user',
+                parts: [
+                    { inlineData: { mimeType: imgMime, data: base64Img } },
+                    {
+                        text: `Please read and analyze this document image and provide a comprehensive summary.
+Structure your summary with:
+1. **Main Topic** (1-2 sentences)
+2. **Key Points** (bullet points)
+3. **Conclusion** (1-2 sentences)
+
+Provide the summary clearly formatted.`
+                    }
+                ]
+            }];
+        }
+        else {
+            return res.status(400).json({ error: 'Document Summary supports PDF, DOCX, TXT, MD, CSV, and Image files.' });
+        }
+
+        // Call Gemini for summarization
+        const geminiRes = await callGemini('gemini-flash-latest', geminiContents);
 
         let summary = '';
         try {
-            const parts = geminiRes.candidates[0].content.parts || [];
+            const parts = geminiRes.candidates?.[0]?.content?.parts || [];
             const textPart = parts.find(p => p.text && !p.thought) || parts.find(p => p.text) || parts[0];
             summary = (textPart && textPart.text ? textPart.text : '').trim();
         } catch (e) {
             return res.status(500).json({ error: 'Gemini returned unexpected response for summarization.' });
         }
 
+        if (!summary) {
+            return res.status(500).json({ error: 'Could not generate summary for this file.' });
+        }
+
         let savedFile = null;
         if (saveToDrive && summary) {
-            const baseName = name.replace(/\.[^.]+$/, '');
+            const baseName = (file.original_name || 'document').replace(/\.[^.]+$/, '');
             const sumName = `${baseName}-summary.txt`;
             const sumBuffer = Buffer.from(summary, 'utf-8');
             savedFile = await saveBufferToDrive(
@@ -518,7 +666,7 @@ router.post('/summarize', requireAuth, async (req, res) => {
         res.json({
             success: true,
             summary,
-            originalLength: documentText.length,
+            originalLength,
             savedFile: savedFile ? { id: savedFile.id, name: savedFile.original_name } : null,
             message: saveToDrive && savedFile ? `Summary saved as "${savedFile.original_name}"` : 'Summary generated successfully.'
         });
