@@ -3194,6 +3194,26 @@ function selectAIFile(id, name, type, size) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  SIDEBAR AI TOOLS DROPDOWN
+// ═══════════════════════════════════════════════════════════════════════════════
+function toggleAIToolsMenu(e) {
+    if (e) e.preventDefault();
+    const dropdown = document.getElementById('aiToolsDropdown');
+    if (!dropdown) return;
+    dropdown.classList.toggle('open');
+}
+
+function onSubmenuClick(fn) {
+    const s = document.getElementById('sidebar');
+    if (s && window.innerWidth <= 900 && s.classList.contains('open')) {
+        s.classList.remove('open');
+        const o = document.getElementById('sidebarOverlay');
+        if (o) o.style.display = 'none';
+    }
+    if (typeof fn === 'function') fn();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  AI TOOLS HUB
 // ═══════════════════════════════════════════════════════════════════════════════
 async function openAIToolsHub() {

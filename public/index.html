@@ -130,17 +130,34 @@
                 </a>
 
                 <div class="sidebar-divider" style="margin:10px 0;"></div>
-                <div class="sidebar-section-label">AI Tools</div>
 
-                <a class="sidebar-nav-item" onclick="openAIToolsHub()" id="navAITools">
-                    <i class="fas fa-robot"></i> AI Tools Hub
-                </a>
-                <a class="sidebar-nav-item" onclick="openConvertModal()" id="navConvert">
-                    <i class="fas fa-file-export"></i> Convert to PDF
-                </a>
-                <a class="sidebar-nav-item" onclick="openOCRModal()" id="navOCR">
-                    <i class="fas fa-font"></i> OCR — Extract Text
-                </a>
+                <div class="sidebar-dropdown" id="aiToolsDropdown">
+                    <button class="sidebar-nav-item sidebar-dropdown-toggle" id="navAITools" onclick="toggleAIToolsMenu(event)">
+                        <div class="sidebar-nav-item-left">
+                            <i class="fas fa-wand-magic-sparkles ai-sparkle-icon"></i>
+                            <span>AI Tools</span>
+                        </div>
+                        <i class="fas fa-chevron-down sidebar-dropdown-chevron" id="aiChevron"></i>
+                    </button>
+                    <div class="sidebar-submenu" id="aiSubmenu">
+                        <a class="sidebar-submenu-item" onclick="onSubmenuClick(openConvertModal)" id="navConvert">
+                            <i class="fas fa-file-pdf" style="color:#ef4444;"></i>
+                            <span>Convert to PDF</span>
+                        </a>
+                        <a class="sidebar-submenu-item" onclick="onSubmenuClick(openOCRModal)" id="navOCR">
+                            <i class="fas fa-font" style="color:#3b82f6;"></i>
+                            <span>OCR — Extract Text</span>
+                        </a>
+                        <a class="sidebar-submenu-item" onclick="onSubmenuClick(openSummaryModal)" id="navSummary">
+                            <i class="fas fa-align-left" style="color:#10b981;"></i>
+                            <span>Document Summary</span>
+                        </a>
+                        <a class="sidebar-submenu-item" onclick="onSubmenuClick(openAIToolsHub)" id="navHub">
+                            <i class="fas fa-th-large" style="color:#8b5cf6;"></i>
+                            <span>All AI Tools</span>
+                        </a>
+                    </div>
+                </div>
             </nav>
 
             <!-- Storage Widget -->
