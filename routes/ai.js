@@ -37,7 +37,7 @@ const GEMINI_MODELS = [
 async function callGemini(preferredModel, contents) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here' || apiKey.trim() === '') {
-        throw new Error('Gemini API Key সেট করা হয়নি! দয়া করে .env ফাইলে আপনার GEMINI_API_KEY দিন। (ফ্রি কী পাবেন: https://aistudio.google.com/app/apikey)');
+        throw new Error('API key is not configured. Please ensure GEMINI_API_KEY is set in your environment.');
     }
 
     const modelsToTry = [
@@ -73,22 +73,22 @@ async function callGemini(preferredModel, contents) {
             } catch(e) {}
 
             if (resp.status === 400 && (errMsg.includes('API key not valid') || errMsg.includes('API_KEY_INVALID'))) {
-                throw new Error('Gemini API Key টি সঠিক নয় বা ইনভ্যালিড। দয়া করে https://aistudio.google.com/app/apikey থেকে একটি নতুন ও কার্যকর API Key নিয়ে .env ফাইলে দিন।');
+                throw new Error('Invalid API key provided. Please check the API configuration.');
             }
 
             // High demand (503) or Rate Limit (429) or Model unavailable (404) -> Fallback to next model
             if (resp.status === 503 || resp.status === 429 || resp.status === 404) {
                 console.warn(`[callGemini] Model ${model} returned ${resp.status} (${errMsg.slice(0, 80)}). Trying fallback model...`);
-                lastError = new Error(`Google Gemini (${model}) সাময়িক ব্যস্ত (High Demand)।`);
+                lastError = new Error(`Service model (${model}) is temporarily unavailable due to high demand.`);
                 if (i < modelsToTry.length - 1) {
                     await new Promise(res => setTimeout(res, 800)); // small delay before next model
                     continue;
                 }
             } else {
-                throw new Error(`Gemini API error (${resp.status}): ${errMsg}`);
+                throw new Error(`Service error (${resp.status}): ${errMsg}`);
             }
         } catch(netErr) {
-            if (netErr.message.includes('API Key টি সঠিক নয়')) throw netErr;
+            if (netErr.message.includes('Invalid API key')) throw netErr;
             console.warn(`[callGemini] Exception on model ${model}:`, netErr.message);
             lastError = netErr;
             if (i < modelsToTry.length - 1) {
@@ -98,7 +98,7 @@ async function callGemini(preferredModel, contents) {
         }
     }
 
-    throw lastError || new Error('Google Gemini সার্ভারে সাময়িক অতিরিক্ত ট্রাফিকের (High Demand) কারণে অনুরোধটি সম্পন্ন করা যায়নি। অনুগ্রহ করে কয়েক সেকেন্ড অপেক্ষা করে আবার চেষ্টা করুন।');
+    throw lastError || new Error('The service is temporarily busy due to high traffic. Please try again in a few moments.');
 }
 
 // Helper: extract text from PDF buffer using pdf-parse (supports both v1 and v2)
@@ -646,7 +646,7 @@ Provide the summary clearly formatted.`
             const textPart = parts.find(p => p.text && !p.thought) || parts.find(p => p.text) || parts[0];
             summary = (textPart && textPart.text ? textPart.text : '').trim();
         } catch (e) {
-            return res.status(500).json({ error: 'Gemini returned unexpected response for summarization.' });
+            return res.status(500).json({ error: 'Unexpected response received during summarization.' });
         }
 
         if (!summary) {

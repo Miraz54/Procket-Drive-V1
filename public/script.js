@@ -477,7 +477,7 @@ async function uploadFile(input) {
         const dupModal = document.getElementById('duplicateWarningModal');
         const dupText = document.getElementById('dupWarningText');
         if (dupModal && dupText) {
-            dupText.innerHTML = `<strong>"${escapeHtml(file.name)}"</strong> নামের একটি ফাইল ইতিমধ্যে এই ফোল্ডারে রয়েছে!<br><br>আপনি কি একই নামের আরেকটি কপি আপলোড করতে চান?`;
+            dupText.innerHTML = `<strong>"${escapeHtml(file.name)}"</strong> already exists in this folder.<br><br>Do you want to upload another copy anyway?`;
             openModal('duplicateWarningModal');
             return;
         } else {
@@ -3408,7 +3408,7 @@ async function doSummarize() {
     const fileId = document.getElementById('summaryFileId').value;
     if (!fileId) { aiShowResult('summaryResultMsg', 'error', '<i class="fas fa-exclamation-circle"></i> Please select a PDF or DOCX file.'); return; }
     aiSetBtnLoading('summaryBtn', true);
-    aiShowResult('summaryResultMsg', 'loading', '<i class="fas fa-circle-notch fa-spin"></i> Reading document and generating AI summary…');
+    aiShowResult('summaryResultMsg', 'loading', '<i class="fas fa-circle-notch fa-spin"></i> Reading document and generating summary…');
     document.getElementById('summaryTextResult').style.display = 'none';
     try {
         const resp = await fetch('/api/ai/summarize', {
@@ -3428,7 +3428,7 @@ async function doSummarize() {
             document.getElementById('summaryTextArea').innerHTML = rendered;
             document.getElementById('summaryTextResult').style.display = 'block';
             aiShowResult('summaryResultMsg', 'success', '<i class="fas fa-check-circle"></i> Summary generated successfully.');
-            pdToast('success', 'Summary Ready', 'AI summary has been generated.');
+            pdToast('success', 'Summary Ready', 'Document summary has been generated.');
         }
     } catch (e) {
         aiShowResult('summaryResultMsg', 'error', '<i class="fas fa-times-circle"></i> Network error. Please try again.');
