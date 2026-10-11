@@ -192,26 +192,32 @@ router.post('/login', authLimiter, async (req, res) => {
 // =========================
 // CURRENT USER
 // =========================
-router.get('/me', requireAuth, async (req, res) => {
+router.get('/me', async (req, res) => {
     try {
+        const userId = (req.session && req.session.userId) || verifyToken(req);
+        if (!userId) {
+            return res.json({ authenticated: false });
+        }
+        if (!req.session) req.session = {};
+        req.session.userId = userId;
 
         const { data, error } = await supabase
             .from('users')
             .select('id, email, name, profile_picture')
-            .eq('id', req.session.userId)
+            .eq('id', userId)
             .single();
 
         if (error || !data) {
-            return res.status(404).json({
-                error: 'User not found'
-            });
+            return res.json({ authenticated: false });
         }
 
-        res.json(data);
+        res.json({
+            authenticated: true,
+            ...data
+        });
 
     } catch (err) {
         console.error(err);
-
         res.status(500).json({
             error: 'Server error'
         });

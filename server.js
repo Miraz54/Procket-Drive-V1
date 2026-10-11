@@ -10,6 +10,9 @@ const { apiLimiter } = require('./lib/security');
 
 const app = express();
 
+// Disable technology disclosure header
+app.disable('x-powered-by');
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 if (isProduction) {
@@ -32,6 +35,13 @@ app.use((req, res, next) => {
     res.header('Cross-Origin-Opener-Policy', 'same-origin');
     res.header('Cross-Origin-Embedder-Policy', 'credentialless');
     res.header('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    // Standard security headers
+    res.header('X-Content-Type-Options', 'nosniff');
+    res.header('X-Frame-Options', 'SAMEORIGIN');
+    res.header('X-XSS-Protection', '1; mode=block');
+    res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });

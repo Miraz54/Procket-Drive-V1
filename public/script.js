@@ -126,9 +126,13 @@ function hideInitSpinner() {
 
 async function checkAuth() {
     try {
+        // Remove legacy stored password if any
+        localStorage.removeItem('pd-password');
+
         const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (res.ok) {
-            const user = await res.json();
+        const user = res.ok ? await res.json() : null;
+
+        if (user && user.authenticated && user.email) {
             const emailEl = document.getElementById('userEmail');
             if (emailEl) emailEl.textContent = user.email;
 
@@ -149,48 +153,22 @@ async function checkAuth() {
             }
             startStoragePolling();
         } else {
+            // Unauthenticated: Pre-fill remembered email securely (without storing password)
             const remember = localStorage.getItem('pd-remember') === 'true';
-            const email = localStorage.getItem('pd-email');
-            const password = localStorage.getItem('pd-password');
-            if (remember && email && password) {
-                await autoLogin(email, password);
+            const savedEmail = localStorage.getItem('pd-email');
+            const emailInput = document.getElementById('loginEmail');
+            const rememberCb = document.getElementById('rememberMe');
+            if (remember && savedEmail && emailInput) {
+                emailInput.value = savedEmail;
+                if (rememberCb) rememberCb.checked = true;
             }
         }
-    } catch (e) { console.error('Auth check failed', e); }
+    } catch (e) {
+        // Silent catch — avoid console errors on unauthenticated page load
+    }
     finally {
         hideInitSpinner();
     }
-}
-
-async function autoLogin(email, password) {
-    try {
-        const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ email, password })
-        });
-        if (res.ok) {
-            const emailEl = document.getElementById('userEmail');
-            if (emailEl) emailEl.textContent = email;
-
-            const redirectUrl = sessionStorage.getItem('pd_post_login_redirect');
-            if (redirectUrl) {
-                sessionStorage.removeItem('pd_post_login_redirect');
-                window.location.href = redirectUrl;
-                return;
-            }
-
-            showDashboard();
-            if (window.location.search.includes('view=shared') || window.location.hash === '#shared') {
-                switchView('shared');
-                loadUserProfile();
-            } else {
-                await Promise.all([loadFiles(), loadUserProfile()]);
-            }
-            startStoragePolling();
-        }
-    } catch (e) { console.error('[auth] Auto-login failed', e); }
 }
 
 async function login(e) {
@@ -212,12 +190,11 @@ async function login(e) {
             if (rememberMe) {
                 localStorage.setItem('pd-remember', 'true');
                 localStorage.setItem('pd-email', email);
-                localStorage.setItem('pd-password', password);
             } else {
                 localStorage.removeItem('pd-remember');
                 localStorage.removeItem('pd-email');
-                localStorage.removeItem('pd-password');
             }
+            localStorage.removeItem('pd-password');
 
             const redirectUrl = sessionStorage.getItem('pd_post_login_redirect');
             if (redirectUrl) {
@@ -2356,9 +2333,11 @@ async function checkPublicShareRoute() {
             const authRes = await fetch('/api/auth/me', { credentials: 'include' });
             if (authRes.ok) {
                 const userData = await authRes.json();
-                // User is logged in — show full app with sidebar
-                await showSharedFolderLoggedIn(token, userData);
-                return true;
+                if (userData && userData.authenticated) {
+                    // User is logged in — show full app with sidebar
+                    await showSharedFolderLoggedIn(token, userData);
+                    return true;
+                }
             }
         } catch (e) { }
 
