@@ -1,18 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pocket Drive - Secure Cloud Storage</title>
-    <meta name="description" content="Pocket Drive — Your personal, secure cloud storage. Upload, manage and access your files from anywhere.">
+    <meta name="description"
+        content="Pocket Drive — Your personal, secure cloud storage. Upload, manage and access your files from anywhere.">
     <link rel="stylesheet" href="/style.css">
     <link rel="icon" href="/favico.png" type="image/png">
     <meta name="google-site-verification" content="lzsKu9MgFnmpEf79SJVPmbAwDYqxwW0n6pbY54baJtw" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
+
 <body class="light-mode">
-    
+
     <!-- App Loader -->
     <div id="appInitSpinner" class="app-init-spinner">
         <i class="fas fa-circle-notch fa-spin fa-3x"></i>
@@ -48,13 +52,16 @@
                         <div class="field-label">Email address</div>
                         <div class="input-group">
                             <i class="fas fa-envelope"></i>
-                            <input type="email" id="loginEmail" placeholder="you@example.com" required autocomplete="email">
+                            <input type="email" id="loginEmail" placeholder="you@example.com" required
+                                autocomplete="email">
                         </div>
                         <div class="field-label">Password</div>
                         <div class="input-group">
                             <i class="fas fa-lock"></i>
-                            <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
-                            <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('loginPassword', this)"></i>
+                            <input type="password" id="loginPassword" placeholder="Enter your password" required
+                                autocomplete="current-password">
+                            <i class="fas fa-eye-slash password-toggle"
+                                onclick="window.togglePassword('loginPassword', this)"></i>
                         </div>
                         <div class="auth-row">
                             <label class="auth-remember"><input type="checkbox" id="rememberMe"> Remember me</label>
@@ -70,29 +77,36 @@
                         <div class="field-label">Email address</div>
                         <div class="input-group">
                             <i class="fas fa-envelope"></i>
-                            <input type="email" id="signupEmail" placeholder="you@example.com" required autocomplete="email">
+                            <input type="email" id="signupEmail" placeholder="you@example.com" required
+                                autocomplete="email">
                         </div>
                         <div class="field-label">Password</div>
                         <div class="input-group">
                             <i class="fas fa-lock"></i>
-                            <input type="password" id="signupPassword" placeholder="Min 6 characters" required autocomplete="new-password">
-                            <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('signupPassword', this)"></i>
+                            <input type="password" id="signupPassword" placeholder="Min 6 characters" required
+                                autocomplete="new-password">
+                            <i class="fas fa-eye-slash password-toggle"
+                                onclick="window.togglePassword('signupPassword', this)"></i>
                         </div>
                         <div class="field-label">Confirm Password</div>
                         <div class="input-group">
                             <i class="fas fa-shield-alt"></i>
-                            <input type="password" id="signupConfirmPassword" placeholder="Re-enter password" required autocomplete="new-password">
-                            <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('signupConfirmPassword', this)"></i>
+                            <input type="password" id="signupConfirmPassword" placeholder="Re-enter password" required
+                                autocomplete="new-password">
+                            <i class="fas fa-eye-slash password-toggle"
+                                onclick="window.togglePassword('signupConfirmPassword', this)"></i>
                         </div>
                         <div id="passwordMatchMsg" class="password-match-msg"></div>
-                        <button type="submit" class="btn-primary"><i class="fas fa-user-plus"></i> Create Account</button>
+                        <button type="submit" class="btn-primary"><i class="fas fa-user-plus"></i> Create
+                            Account</button>
                     </form>
                 </div>
 
                 <div id="authMessage" class="message"></div>
             </div>
 
-            <p class="auth-footer-note">&copy; 2026 Pocket Drive &bull; Md. Mirazul Alam &bull; Ruma Ahmed Ety &bull; All rights reserved</p>
+            <p class="auth-footer-note">&copy; 2026 Pocket Drive &bull; Md. Mirazul Alam &bull; Ruma Ahmed Ety &bull;
+                All rights reserved</p>
         </div>
     </div>
 
@@ -107,10 +121,12 @@
             </div>
 
             <div class="sidebar-actions-row">
-                <button class="sidebar-action-btn sidebar-upload-btn" onclick="document.getElementById('fileInput').click()" title="New Upload" aria-label="New Upload">
+                <button class="sidebar-action-btn sidebar-upload-btn"
+                    onclick="document.getElementById('fileInput').click()" title="New Upload" aria-label="New Upload">
                     <i class="fas fa-cloud-arrow-up"></i>
                 </button>
-                <button class="sidebar-action-btn sidebar-folder-btn" onclick="openCreateFolderModal()" title="New Folder" aria-label="New Folder">
+                <button class="sidebar-action-btn sidebar-folder-btn" onclick="openCreateFolderModal()"
+                    title="New Folder" aria-label="New Folder">
                     <i class="fas fa-folder-plus"></i>
                 </button>
             </div>
@@ -125,7 +141,8 @@
                 <a class="sidebar-nav-item" id="navSharedWithMe" onclick="switchView('shared')">
                     <i class="fas fa-user-friends"></i> Shared with me
                 </a>
-                <a class="sidebar-nav-item" id="navTrash" onclick="(function(){const s=document.getElementById('sidebar');if(s&&window.innerWidth<=900&&s.classList.contains('open')){s.classList.remove('open');const o=document.getElementById('sidebarOverlay');if(o)o.style.display='none';}showTrashView();})()">
+                <a class="sidebar-nav-item" id="navTrash"
+                    onclick="(function(){const s=document.getElementById('sidebar');if(s&&window.innerWidth<=900&&s.classList.contains('open')){s.classList.remove('open');const o=document.getElementById('sidebarOverlay');if(o)o.style.display='none';}showTrashView();})()">
                     <i class="fas fa-trash-alt"></i> Trash
                 </a>
 
@@ -151,10 +168,6 @@
                         <a class="sidebar-submenu-item" onclick="onSubmenuClick(openSummaryModal)" id="navSummary">
                             <i class="fas fa-align-left" style="color:#10b981;"></i>
                             <span>Document Summary</span>
-                        </a>
-                        <a class="sidebar-submenu-item" onclick="onSubmenuClick(openAIToolsHub)" id="navHub">
-                            <i class="fas fa-th-large" style="color:#8b5cf6;"></i>
-                            <span>All AI Tools</span>
                         </a>
                     </div>
                 </div>
@@ -191,15 +204,19 @@
                 <div class="topbar-right">
                     <div class="topbar-search">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="searchInput" placeholder="Search files…" oninput="filterFiles(this.value)">
+                        <input type="text" id="searchInput" placeholder="Search files…"
+                            oninput="filterFiles(this.value)">
                     </div>
                     <div class="topbar-user-dropdown-wrap" id="userDropdownWrap">
-                        <button class="topbar-avatar-btn" id="userDropdownBtn" onclick="toggleUserDropdown(event)" title="Account menu" aria-label="Account menu">
-                            <img id="profileAvatar" src="/uploads/default-avatar.png" alt="Profile" class="topbar-avatar">
+                        <button class="topbar-avatar-btn" id="userDropdownBtn" onclick="toggleUserDropdown(event)"
+                            title="Account menu" aria-label="Account menu">
+                            <img id="profileAvatar" src="/uploads/default-avatar.png" alt="Profile"
+                                class="topbar-avatar">
                         </button>
                         <div class="topbar-dropdown-menu" id="userDropdownMenu">
                             <div class="dropdown-user-header">
-                                <img id="dropdownAvatar" src="/uploads/default-avatar.png" alt="Profile" class="dropdown-avatar">
+                                <img id="dropdownAvatar" src="/uploads/default-avatar.png" alt="Profile"
+                                    class="dropdown-avatar">
                                 <div class="dropdown-user-info">
                                     <span class="dropdown-user-name" id="userName">User</span>
                                     <span class="dropdown-user-email" id="userEmail"></span>
@@ -224,17 +241,17 @@
             <div class="app-content">
 
                 <!-- Upload Area -->
-                <div class="upload-dropzone" id="uploadDropzone"
-                     onclick="document.getElementById('fileInput').click()"
-                     ondragover="event.preventDefault(); this.classList.add('dragover')"
-                     ondragleave="this.classList.remove('dragover')"
-                     ondrop="handleDrop(event)">
+                <div class="upload-dropzone" id="uploadDropzone" onclick="document.getElementById('fileInput').click()"
+                    ondragover="event.preventDefault(); this.classList.add('dragover')"
+                    ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
                     <div class="dropzone-inner">
                         <div class="dropzone-left-group">
                             <div class="dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
                             <div class="dropzone-text-group">
-                                <p class="dropzone-text">Drop files here to upload, or <span class="dropzone-link">browse</span></p>
-                                <small class="dropzone-sub">Supports all common file types &bull; Max 100MB per file</small>
+                                <p class="dropzone-text">Drop files here to upload, or <span
+                                        class="dropzone-link">browse</span></p>
+                                <small class="dropzone-sub">Supports all common file types &bull; Max 100MB per
+                                    file</small>
                             </div>
                         </div>
                         <div class="dropzone-btn">
@@ -259,9 +276,12 @@
                     <div class="files-card-header">
                         <div id="breadcrumbBar" class="breadcrumb-bar" style="display:none;"></div>
                         <div class="view-controls">
-                            <button class="view-btn active" onclick="setView('grid')" id="gridViewBtn" title="Grid View"><i class="fas fa-th-large"></i></button>
-                            <button class="view-btn" onclick="setView('list')" id="listViewBtn" title="List View"><i class="fas fa-list"></i></button>
-                            <button class="view-btn" onclick="refreshCurrentView()" title="Refresh files"><i class="fas fa-sync-alt"></i></button>
+                            <button class="view-btn active" onclick="setView('grid')" id="gridViewBtn"
+                                title="Grid View"><i class="fas fa-th-large"></i></button>
+                            <button class="view-btn" onclick="setView('list')" id="listViewBtn" title="List View"><i
+                                    class="fas fa-list"></i></button>
+                            <button class="view-btn" onclick="refreshCurrentView()" title="Refresh files"><i
+                                    class="fas fa-sync-alt"></i></button>
                         </div>
                     </div>
                     <div id="fileList" class="file-container grid-view"></div>
@@ -293,7 +313,8 @@
                     <div class="public-error-icon"><i class="fas fa-exclamation-triangle"></i></div>
                     <h2>Link Unavailable or Expired</h2>
                     <p id="publicErrorMsg">This shared file or folder could not be found or has been deleted.</p>
-                    <a href="/" class="btn-primary" style="margin-top:16px; display:inline-flex; gap:8px;"><i class="fas fa-home"></i> Back to Pocket Drive</a>
+                    <a href="/" class="btn-primary" style="margin-top:16px; display:inline-flex; gap:8px;"><i
+                            class="fas fa-home"></i> Back to Pocket Drive</a>
                 </div>
 
                 <!-- Shared File Preview -->
@@ -326,11 +347,13 @@
                 <!-- Shared Folder Preview -->
                 <div id="publicFolderContent" class="public-folder-content" style="display:none;">
                     <div class="public-file-header">
-                        <div class="public-file-icon"><i class="fas fa-folder" style="font-size:42px;color:#f59e0b;"></i></div>
+                        <div class="public-file-icon"><i class="fas fa-folder"
+                                style="font-size:42px;color:#f59e0b;"></i></div>
                         <div class="public-file-info">
                             <h1 class="public-file-title" id="pubFolderName">Folder Name</h1>
                             <div class="public-file-meta">
-                                <span class="pub-badge" style="background:rgba(245,158,11,0.2);color:#f59e0b;">Shared Folder</span>
+                                <span class="pub-badge" style="background:rgba(245,158,11,0.2);color:#f59e0b;">Shared
+                                    Folder</span>
                                 <span id="pubFolderFileCount">0 files</span>
                             </div>
                         </div>
@@ -356,11 +379,13 @@
                 <div class="input-group" style="margin-bottom:20px;">
                     <i class="fas fa-folder"></i>
                     <input type="text" id="newFolderName" placeholder="e.g. Photos, Documents…" maxlength="100"
-                           onkeydown="if(event.key==='Enter'){ event.preventDefault(); createFolder(); }">
+                        onkeydown="if(event.key==='Enter'){ event.preventDefault(); createFolder(); }">
                 </div>
                 <div style="display:flex;gap:10px;">
-                    <button class="btn-secondary" onclick="closeCreateFolderModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
-                    <button class="btn-primary" onclick="createFolder()" style="flex:1;margin:0;border-radius:12px;"><i class="fas fa-folder-plus"></i> Create</button>
+                    <button class="btn-secondary" onclick="closeCreateFolderModal()"
+                        style="flex:1;margin:0;border-radius:12px;">Cancel</button>
+                    <button class="btn-primary" onclick="createFolder()" style="flex:1;margin:0;border-radius:12px;"><i
+                            class="fas fa-folder-plus"></i> Create</button>
                 </div>
             </div>
         </div>
@@ -378,11 +403,13 @@
                 <div class="input-group" style="margin-bottom:20px;">
                     <i class="fas fa-folder" style="color:#f59e0b;"></i>
                     <input type="text" id="renameFolderNameInput" placeholder="Enter new folder name…" maxlength="100"
-                           onkeydown="if(event.key==='Enter') submitRenameFolder()">
+                        onkeydown="if(event.key==='Enter') submitRenameFolder()">
                 </div>
                 <div style="display:flex;gap:10px;">
-                    <button class="btn-secondary" onclick="closeRenameFolderModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
-                    <button class="btn-primary" onclick="submitRenameFolder()" style="flex:1;margin:0;border-radius:12px;"><i class="fas fa-check"></i> Save</button>
+                    <button class="btn-secondary" onclick="closeRenameFolderModal()"
+                        style="flex:1;margin:0;border-radius:12px;">Cancel</button>
+                    <button class="btn-primary" onclick="submitRenameFolder()"
+                        style="flex:1;margin:0;border-radius:12px;"><i class="fas fa-check"></i> Save</button>
                 </div>
             </div>
         </div>
@@ -395,8 +422,10 @@
             <h3 class="confirm-title" id="confirmTitle">Are you sure?</h3>
             <p class="confirm-message" id="confirmMessage">Do you want to proceed with this action?</p>
             <div class="confirm-buttons">
-                <button class="btn-secondary" id="confirmCancelBtn" style="margin:0; width:100%; border-radius:12px;">Cancel</button>
-                <button class="btn-primary" id="confirmYesBtn" style="margin:0; width:100%; border-radius:12px;">Confirm</button>
+                <button class="btn-secondary" id="confirmCancelBtn"
+                    style="margin:0; width:100%; border-radius:12px;">Cancel</button>
+                <button class="btn-primary" id="confirmYesBtn"
+                    style="margin:0; width:100%; border-radius:12px;">Confirm</button>
             </div>
         </div>
     </div>
@@ -420,7 +449,9 @@
                     <i class="fas fa-globe"></i>
                     <span>Anyone with the link can view this file</span>
                 </div>
-                <div id="shareImagePreview" style="display:none; margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);"></div>
+                <div id="shareImagePreview"
+                    style="display:none; margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                </div>
                 <div class="share-link-box">
                     <input type="text" id="shareLinkInput" class="share-link-input" readonly>
                     <button class="share-copy-btn" onclick="copyShareLink()" id="shareCopyBtn">
@@ -428,7 +459,8 @@
                     </button>
                 </div>
                 <div class="share-actions">
-                    <a id="shareOpenLink" href="#" target="_blank" rel="noopener" class="share-action-btn share-action-open">
+                    <a id="shareOpenLink" href="#" target="_blank" rel="noopener"
+                        class="share-action-btn share-action-open">
                         <i class="fas fa-external-link-alt"></i> Open Link
                     </a>
                     <a id="shareDownloadLink" href="#" download class="share-action-btn share-action-download">
@@ -437,15 +469,21 @@
                 </div>
 
                 <!-- Email Sharing -->
-                <div class="share-email-section" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
-                    <div style="font-weight:600;font-size:0.9rem;margin-bottom:8px;color:var(--text-1);"><i class="fas fa-user-plus" style="color:var(--accent);"></i> Share with specific people</div>
+                <div class="share-email-section"
+                    style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+                    <div style="font-weight:600;font-size:0.9rem;margin-bottom:8px;color:var(--text-1);"><i
+                            class="fas fa-user-plus" style="color:var(--accent);"></i> Share with specific people</div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                        <input type="email" id="shareEmailInput" class="share-link-input" placeholder="friend@gmail.com" style="flex:2;min-width:150px;" onkeydown="if(event.key==='Enter') submitShareEmail()">
-                        <select id="shareRoleInput" style="flex:1;min-width:90px;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-size:0.85rem;cursor:pointer;outline:none;">
+                        <input type="email" id="shareEmailInput" class="share-link-input" placeholder="friend@gmail.com"
+                            style="flex:2;min-width:150px;" onkeydown="if(event.key==='Enter') submitShareEmail()">
+                        <select id="shareRoleInput"
+                            style="flex:1;min-width:90px;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);padding:8px 12px;border-radius:10px;font-size:0.85rem;cursor:pointer;outline:none;">
                             <option value="viewer" selected>Viewer</option>
                             <option value="editor">Editor</option>
                         </select>
-                        <button class="btn-primary" onclick="submitShareEmail()" style="margin:0;padding:8px 16px;font-size:0.85rem;border-radius:10px;white-space:nowrap;"><i class="fas fa-paper-plane"></i> Share</button>
+                        <button class="btn-primary" onclick="submitShareEmail()"
+                            style="margin:0;padding:8px 16px;font-size:0.85rem;border-radius:10px;white-space:nowrap;"><i
+                                class="fas fa-paper-plane"></i> Share</button>
                     </div>
                     <div id="sharedEmailList" class="shared-email-list" style="margin-top:10px;"></div>
                 </div>
@@ -466,7 +504,8 @@
                     <input type="checkbox" id="trashSelectAllChk" onchange="trashToggleSelectAll()">
                     <span>Select All</span>
                 </label>
-                <button id="trashDeleteSelectedBtn" class="btn-primary btn-small" onclick="trashDeleteSelected()" disabled
+                <button id="trashDeleteSelectedBtn" class="btn-primary btn-small" onclick="trashDeleteSelected()"
+                    disabled
                     style="background:linear-gradient(135deg,#ef4444,#f87171);box-shadow:0 2px 10px rgba(239,68,68,0.35);margin-left:auto;">
                     <i class="fas fa-trash-alt"></i> Delete Selected
                 </button>
@@ -495,16 +534,20 @@
             </div>
             <div class="profile-pic-section">
                 <img id="modalProfilePic" src="/uploads/default-avatar.png" alt="Profile" class="profile-avatar-large">
-                <button onclick="document.getElementById('profilePicInput').click()" class="btn-secondary"><i class="fas fa-camera"></i> Change</button>
-                <input type="file" id="profilePicInput" accept="image/*" style="display:none" onchange="uploadProfilePicture(this)">
+                <button onclick="document.getElementById('profilePicInput').click()" class="btn-secondary"><i
+                        class="fas fa-camera"></i> Change</button>
+                <input type="file" id="profilePicInput" accept="image/*" style="display:none"
+                    onchange="uploadProfilePicture(this)">
             </div>
             <div class="profile-field">
                 <label>Display Name</label>
                 <input type="text" id="profileNameInput" placeholder="Your name" autocomplete="name">
-                <button onclick="updateProfileName()" class="btn-primary btn-small"><i class="fas fa-check"></i> Save</button>
+                <button onclick="updateProfileName()" class="btn-primary btn-small"><i class="fas fa-check"></i>
+                    Save</button>
             </div>
             <div class="profile-field" style="margin-top:20px; border-top:1px solid var(--border); padding-top:18px;">
-                <button onclick="closeProfileModal(); changePasswordDialog();" class="btn-secondary" style="width:100%; border-radius:12px; margin-top:0;">
+                <button onclick="closeProfileModal(); changePasswordDialog();" class="btn-secondary"
+                    style="width:100%; border-radius:12px; margin-top:0;">
                     <i class="fas fa-key"></i> Change Password
                 </button>
             </div>
@@ -517,17 +560,23 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3><i class="fas fa-key"></i> Change Password</h3>
-                <button class="modal-close-btn" onclick="closeChangePasswordModal()"><i class="fas fa-times"></i></button>
+                <button class="modal-close-btn" onclick="closeChangePasswordModal()"><i
+                        class="fas fa-times"></i></button>
             </div>
             <div class="input-group" style="margin-top:8px;">
-                <input type="password" id="currentPassword" placeholder="Current password" class="modal-input" autocomplete="current-password">
-                <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('currentPassword', this)"></i>
+                <input type="password" id="currentPassword" placeholder="Current password" class="modal-input"
+                    autocomplete="current-password">
+                <i class="fas fa-eye-slash password-toggle"
+                    onclick="window.togglePassword('currentPassword', this)"></i>
             </div>
             <div class="input-group">
-                <input type="password" id="newPasswordModal" placeholder="New password (min 6)" class="modal-input" autocomplete="new-password">
-                <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('newPasswordModal', this)"></i>
+                <input type="password" id="newPasswordModal" placeholder="New password (min 6)" class="modal-input"
+                    autocomplete="new-password">
+                <i class="fas fa-eye-slash password-toggle"
+                    onclick="window.togglePassword('newPasswordModal', this)"></i>
             </div>
-            <button onclick="submitChangePassword()" class="btn-primary"><i class="fas fa-save"></i> Update Password</button>
+            <button onclick="submitChangePassword()" class="btn-primary"><i class="fas fa-save"></i> Update
+                Password</button>
             <div id="changePasswordMessage" class="message"></div>
         </div>
     </div>
@@ -556,37 +605,45 @@
                     <i class="fas fa-envelope"></i>
                     <input type="email" id="forgotEmail" placeholder="Enter your email" autocomplete="email" required>
                 </div>
-                <button onclick="sendForgotCode()" class="btn-primary" id="forgotSendBtn"><i class="fas fa-paper-plane"></i> Send Verification Code</button>
+                <button onclick="sendForgotCode()" class="btn-primary" id="forgotSendBtn"><i
+                        class="fas fa-paper-plane"></i> Send Verification Code</button>
             </div>
 
             <!-- Step 2 -->
             <div id="forgotStep2" class="forgot-step-content" style="display:none;">
                 <p class="forgot-desc">Enter the 6-digit code sent to <strong id="forgotEmailDisplay"></strong></p>
                 <div class="otp-container">
-                    <input type="text" maxlength="1" class="otp-input" data-index="0" inputmode="numeric" autocomplete="one-time-code">
+                    <input type="text" maxlength="1" class="otp-input" data-index="0" inputmode="numeric"
+                        autocomplete="one-time-code">
                     <input type="text" maxlength="1" class="otp-input" data-index="1" inputmode="numeric">
                     <input type="text" maxlength="1" class="otp-input" data-index="2" inputmode="numeric">
                     <input type="text" maxlength="1" class="otp-input" data-index="3" inputmode="numeric">
                     <input type="text" maxlength="1" class="otp-input" data-index="4" inputmode="numeric">
                     <input type="text" maxlength="1" class="otp-input" data-index="5" inputmode="numeric">
                 </div>
-                <button onclick="verifyForgotCode()" class="btn-primary" id="forgotVerifyBtn"><i class="fas fa-check-circle"></i> Verify Code</button>
+                <button onclick="verifyForgotCode()" class="btn-primary" id="forgotVerifyBtn"><i
+                        class="fas fa-check-circle"></i> Verify Code</button>
                 <div class="forgot-resend">
                     <span id="forgotResendTimer">Resend code in <strong id="forgotCountdown">60</strong>s</span>
-                    <button id="forgotResendBtn" class="forgot-resend-btn" onclick="sendForgotCode()" style="display:none;"><i class="fas fa-redo"></i> Resend Code</button>
+                    <button id="forgotResendBtn" class="forgot-resend-btn" onclick="sendForgotCode()"
+                        style="display:none;"><i class="fas fa-redo"></i> Resend Code</button>
                 </div>
             </div>
 
             <!-- Step 3 -->
             <div id="forgotStep3" class="forgot-step-content" style="display:none;">
-                <p class="forgot-desc"><i class="fas fa-check-circle" style="color:var(--success);"></i> Email verified! Set your new password.</p>
+                <p class="forgot-desc"><i class="fas fa-check-circle" style="color:var(--success);"></i> Email verified!
+                    Set your new password.</p>
                 <div class="field-label">New Password</div>
                 <div class="input-group">
                     <i class="fas fa-lock"></i>
-                    <input type="password" id="forgotNewPassword" placeholder="New password (min 6)" class="modal-input" autocomplete="new-password" required>
-                    <i class="fas fa-eye-slash password-toggle" onclick="window.togglePassword('forgotNewPassword', this)"></i>
+                    <input type="password" id="forgotNewPassword" placeholder="New password (min 6)" class="modal-input"
+                        autocomplete="new-password" required>
+                    <i class="fas fa-eye-slash password-toggle"
+                        onclick="window.togglePassword('forgotNewPassword', this)"></i>
                 </div>
-                <button onclick="submitForgotReset()" class="btn-primary" id="forgotResetBtn"><i class="fas fa-check-circle"></i> Update Password</button>
+                <button onclick="submitForgotReset()" class="btn-primary" id="forgotResetBtn"><i
+                        class="fas fa-check-circle"></i> Update Password</button>
             </div>
 
             <div id="forgotMessage" class="message"></div>
@@ -605,7 +662,8 @@
                 <button class="modal-close-btn" onclick="closeAIToolsHub()"><i class="fas fa-times"></i></button>
             </div>
             <div class="ai-hub-body">
-                <p class="ai-hub-subtitle">Powered by Google Gemini AI — Select a file from your Drive, then choose a tool.</p>
+                <p class="ai-hub-subtitle">Powered by Google Gemini AI — Select a file from your Drive, then choose a
+                    tool.</p>
 
                 <div class="ai-tools-grid">
                     <!-- Convert to PDF -->
@@ -651,12 +709,14 @@
     <!-- Convert to PDF Modal -->
     <div id="convertModal" class="modal">
         <div class="modal-content" style="max-width:480px;">
-            <div class="modal-header" style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(239,68,68,0.15));">
+            <div class="modal-header"
+                style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(239,68,68,0.15));">
                 <h3><i class="fas fa-file-pdf" style="color:#ef4444;"></i> Convert to PDF</h3>
                 <button class="modal-close-btn" onclick="closeConvertModal()"><i class="fas fa-times"></i></button>
             </div>
             <div style="padding:24px;">
-                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Convert an image (JPG, PNG, WebP) or Word document (DOCX) to PDF and save it directly to your Drive.</p>
+                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Convert an image (JPG, PNG, WebP) or
+                    Word document (DOCX) to PDF and save it directly to your Drive.</p>
 
                 <div class="field-label">Select File from Drive</div>
                 <div class="ai-file-picker" id="convertFilePicker">
@@ -672,7 +732,8 @@
                             <span class="ai-selected-file-name" id="convertSelectedName">-</span>
                             <span class="ai-selected-file-meta" id="convertSelectedMeta">-</span>
                         </div>
-                        <button onclick="clearConvertFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
+                        <button onclick="clearConvertFile()" class="ai-clear-btn" title="Remove"><i
+                                class="fas fa-times"></i></button>
                     </div>
                 </div>
                 <input type="hidden" id="convertFileId">
@@ -685,8 +746,10 @@
                 <div id="convertResult" class="ai-result-box" style="display:none;"></div>
 
                 <div style="display:flex;gap:10px;margin-top:20px;">
-                    <button class="btn-secondary" onclick="closeConvertModal()" style="flex:1;margin:0;border-radius:12px;">Cancel</button>
-                    <button class="btn-primary" onclick="doConvert()" id="convertBtn" style="flex:1;margin:0;border-radius:12px;">
+                    <button class="btn-secondary" onclick="closeConvertModal()"
+                        style="flex:1;margin:0;border-radius:12px;">Cancel</button>
+                    <button class="btn-primary" onclick="doConvert()" id="convertBtn"
+                        style="flex:1;margin:0;border-radius:12px;">
                         <i class="fas fa-magic"></i> Convert to PDF
                     </button>
                 </div>
@@ -697,12 +760,14 @@
     <!-- OCR Modal -->
     <div id="ocrModal" class="modal">
         <div class="modal-content" style="max-width:560px;">
-            <div class="modal-header" style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(99,102,241,0.15));">
+            <div class="modal-header"
+                style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(99,102,241,0.15));">
                 <h3><i class="fas fa-font" style="color:#3b82f6;"></i> OCR — Extract Text</h3>
                 <button class="modal-close-btn" onclick="closeOCRModal()"><i class="fas fa-times"></i></button>
             </div>
             <div style="padding:24px;">
-                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Extract text from scanned images or text-based PDFs. Optionally save the result as a .txt file.</p>
+                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">Extract text from scanned images or
+                    text-based PDFs. Optionally save the result as a .txt file.</p>
 
                 <div class="field-label">Select File from Drive</div>
                 <div class="ai-file-picker" id="ocrFilePicker">
@@ -718,17 +783,23 @@
                             <span class="ai-selected-file-name" id="ocrSelectedName">-</span>
                             <span class="ai-selected-file-meta" id="ocrSelectedMeta">-</span>
                         </div>
-                        <button onclick="clearOCRFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
+                        <button onclick="clearOCRFile()" class="ai-clear-btn" title="Remove"><i
+                                class="fas fa-times"></i></button>
                     </div>
                 </div>
                 <input type="hidden" id="ocrFileId">
 
                 <div id="ocrTextResult" style="display:none;margin-top:16px;">
-                    <div class="field-label">Extracted Text <span id="ocrWordCount" style="color:var(--accent);font-weight:600;"></span></div>
-                    <textarea id="ocrTextArea" readonly style="width:100%;height:180px;resize:vertical;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:0.85rem;font-family:monospace;line-height:1.5;outline:none;"></textarea>
+                    <div class="field-label">Extracted Text <span id="ocrWordCount"
+                            style="color:var(--accent);font-weight:600;"></span></div>
+                    <textarea id="ocrTextArea" readonly
+                        style="width:100%;height:180px;resize:vertical;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:0.85rem;font-family:monospace;line-height:1.5;outline:none;"></textarea>
                     <div style="display:flex;gap:8px;margin-top:10px;">
-                        <button class="btn-secondary" onclick="copyOCRText()" style="margin:0;border-radius:10px;font-size:0.85rem;"><i class="fas fa-copy"></i> Copy Text</button>
-                        <button class="btn-primary" onclick="saveOCRText()" id="ocrSaveBtn" style="margin:0;border-radius:10px;font-size:0.85rem;">
+                        <button class="btn-secondary" onclick="copyOCRText()"
+                            style="margin:0;border-radius:10px;font-size:0.85rem;"><i class="fas fa-copy"></i> Copy
+                            Text</button>
+                        <button class="btn-primary" onclick="saveOCRText()" id="ocrSaveBtn"
+                            style="margin:0;border-radius:10px;font-size:0.85rem;">
                             <i class="fas fa-save"></i> Save as .txt to Drive
                         </button>
                     </div>
@@ -737,8 +808,10 @@
                 <div id="ocrResultMsg" class="ai-result-box" style="display:none;margin-top:12px;"></div>
 
                 <div style="display:flex;gap:10px;margin-top:20px;">
-                    <button class="btn-secondary" onclick="closeOCRModal()" style="flex:1;margin:0;border-radius:12px;">Close</button>
-                    <button class="btn-primary" onclick="doOCR()" id="ocrBtn" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#6366f1);">
+                    <button class="btn-secondary" onclick="closeOCRModal()"
+                        style="flex:1;margin:0;border-radius:12px;">Close</button>
+                    <button class="btn-primary" onclick="doOCR()" id="ocrBtn"
+                        style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#6366f1);">
                         <i class="fas fa-font"></i> Extract Text
                     </button>
                 </div>
@@ -749,12 +822,14 @@
     <!-- Document Summary Modal -->
     <div id="summaryModal" class="modal">
         <div class="modal-content" style="max-width:560px;">
-            <div class="modal-header" style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(16,185,129,0.15));">
+            <div class="modal-header"
+                style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(16,185,129,0.15));">
                 <h3><i class="fas fa-align-left" style="color:#f59e0b;"></i> Document Summary</h3>
                 <button class="modal-close-btn" onclick="closeSummaryModal()"><i class="fas fa-times"></i></button>
             </div>
             <div style="padding:24px;">
-                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">AI reads your PDF or DOCX and generates a structured summary with key points.</p>
+                <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:20px;">AI reads your PDF or DOCX and
+                    generates a structured summary with key points.</p>
 
                 <div class="field-label">Select Document from Drive</div>
                 <div class="ai-file-picker" id="summaryFilePicker">
@@ -770,17 +845,23 @@
                             <span class="ai-selected-file-name" id="summarySelectedName">-</span>
                             <span class="ai-selected-file-meta" id="summarySelectedMeta">-</span>
                         </div>
-                        <button onclick="clearSummaryFile()" class="ai-clear-btn" title="Remove"><i class="fas fa-times"></i></button>
+                        <button onclick="clearSummaryFile()" class="ai-clear-btn" title="Remove"><i
+                                class="fas fa-times"></i></button>
                     </div>
                 </div>
                 <input type="hidden" id="summaryFileId">
 
                 <div id="summaryTextResult" style="display:none;margin-top:16px;">
                     <div class="field-label">AI Generated Summary</div>
-                    <div id="summaryTextArea" style="width:100%;min-height:160px;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.88rem;line-height:1.7;overflow-y:auto;max-height:300px;"></div>
+                    <div id="summaryTextArea"
+                        style="width:100%;min-height:160px;background:var(--bg-input);color:var(--text-1);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.88rem;line-height:1.7;overflow-y:auto;max-height:300px;">
+                    </div>
                     <div style="display:flex;gap:8px;margin-top:10px;">
-                        <button class="btn-secondary" onclick="copySummaryText()" style="margin:0;border-radius:10px;font-size:0.85rem;"><i class="fas fa-copy"></i> Copy Summary</button>
-                        <button class="btn-primary" onclick="saveSummaryText()" id="summarySaveBtn" style="margin:0;border-radius:10px;font-size:0.85rem;">
+                        <button class="btn-secondary" onclick="copySummaryText()"
+                            style="margin:0;border-radius:10px;font-size:0.85rem;"><i class="fas fa-copy"></i> Copy
+                            Summary</button>
+                        <button class="btn-primary" onclick="saveSummaryText()" id="summarySaveBtn"
+                            style="margin:0;border-radius:10px;font-size:0.85rem;">
                             <i class="fas fa-save"></i> Save as .txt to Drive
                         </button>
                     </div>
@@ -789,8 +870,10 @@
                 <div id="summaryResultMsg" class="ai-result-box" style="display:none;margin-top:12px;"></div>
 
                 <div style="display:flex;gap:10px;margin-top:20px;">
-                    <button class="btn-secondary" onclick="closeSummaryModal()" style="flex:1;margin:0;border-radius:12px;">Close</button>
-                    <button class="btn-primary" onclick="doSummarize()" id="summaryBtn" style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#10b981);">
+                    <button class="btn-secondary" onclick="closeSummaryModal()"
+                        style="flex:1;margin:0;border-radius:12px;">Close</button>
+                    <button class="btn-primary" onclick="doSummarize()" id="summaryBtn"
+                        style="flex:1;margin:0;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#10b981);">
                         <i class="fas fa-align-left"></i> Summarize Document
                     </button>
                 </div>
@@ -801,16 +884,21 @@
     <!-- Duplicate File Warning Modal -->
     <div id="duplicateWarningModal" class="modal" style="z-index: 1200;">
         <div class="modal-content" style="max-width: 440px; text-align: center; padding: 26px 22px;">
-            <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(245, 158, 11, 0.15); color: #f59e0b; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin: 0 auto 16px auto;">
+            <div
+                style="width: 56px; height: 56px; border-radius: 50%; background: rgba(245, 158, 11, 0.15); color: #f59e0b; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin: 0 auto 16px auto;">
                 <i class="fas fa-exclamation-triangle"></i>
             </div>
             <h3 style="margin-bottom: 8px; font-size: 1.2rem; color: var(--text-1);">Duplicate File Warning</h3>
-            <p id="dupWarningText" style="color: var(--text-2); font-size: 0.9rem; line-height: 1.5; margin-bottom: 22px; word-break: break-word;">
+            <p id="dupWarningText"
+                style="color: var(--text-2); font-size: 0.9rem; line-height: 1.5; margin-bottom: 22px; word-break: break-word;">
                 A file with this name already exists in this folder.
             </p>
             <div style="display: flex; gap: 10px;">
-                <button class="btn-secondary" id="dupCancelBtn" style="flex: 1; border-radius: 12px; margin: 0;">Cancel Upload</button>
-                <button class="btn-primary" id="dupProceedBtn" style="flex: 1; border-radius: 12px; margin: 0; background: #f59e0b; border-color: #f59e0b;">Keep Both</button>
+                <button class="btn-secondary" id="dupCancelBtn" style="flex: 1; border-radius: 12px; margin: 0;">Cancel
+                    Upload</button>
+                <button class="btn-primary" id="dupProceedBtn"
+                    style="flex: 1; border-radius: 12px; margin: 0; background: #f59e0b; border-color: #f59e0b;">Keep
+                    Both</button>
             </div>
         </div>
     </div>
@@ -826,15 +914,20 @@
                 <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
                     <div class="topbar-search" style="flex:1;margin:0;">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="aiFilePickerSearch" placeholder="Search files by name…" oninput="filterAIFilePicker(this.value)">
+                        <input type="text" id="aiFilePickerSearch" placeholder="Search files by name…"
+                            oninput="filterAIFilePicker(this.value)">
                     </div>
                     <span id="aiPickerCount" class="ai-picker-count-badge"></span>
                 </div>
                 <div class="ai-picker-filter-tabs" id="aiPickerTabs">
-                    <button class="ai-picker-tab-btn active" id="tab-all" onclick="setAIPickerCategory('all', this)"><i class="fas fa-layer-group"></i> All</button>
-                    <button class="ai-picker-tab-btn" id="tab-image" onclick="setAIPickerCategory('image', this)"><i class="fas fa-image"></i> Images</button>
-                    <button class="ai-picker-tab-btn" id="tab-pdf" onclick="setAIPickerCategory('pdf', this)"><i class="fas fa-file-pdf"></i> PDFs</button>
-                    <button class="ai-picker-tab-btn" id="tab-docx" onclick="setAIPickerCategory('docx', this)"><i class="fas fa-file-word"></i> Word (DOCX)</button>
+                    <button class="ai-picker-tab-btn active" id="tab-all" onclick="setAIPickerCategory('all', this)"><i
+                            class="fas fa-layer-group"></i> All</button>
+                    <button class="ai-picker-tab-btn" id="tab-image" onclick="setAIPickerCategory('image', this)"><i
+                            class="fas fa-image"></i> Images</button>
+                    <button class="ai-picker-tab-btn" id="tab-pdf" onclick="setAIPickerCategory('pdf', this)"><i
+                            class="fas fa-file-pdf"></i> PDFs</button>
+                    <button class="ai-picker-tab-btn" id="tab-docx" onclick="setAIPickerCategory('docx', this)"><i
+                            class="fas fa-file-word"></i> Word (DOCX)</button>
                 </div>
                 <div id="aiFilePickerList" class="ai-picker-grid"></div>
             </div>
@@ -843,4 +936,5 @@
 
     <script src="/script.js?v=2.2"></script>
 </body>
+
 </html>

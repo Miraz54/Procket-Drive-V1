@@ -1,15 +1,15 @@
 // Toast notifications
 const TOAST_ICONS = {
     success: 'fa-circle-check',
-    error:   'fa-circle-xmark',
-    info:    'fa-circle-info',
+    error: 'fa-circle-xmark',
+    info: 'fa-circle-info',
     warning: 'fa-triangle-exclamation'
 };
 
 const TOAST_TITLES = {
     success: 'Success',
-    error:   'Error',
-    info:    'Info',
+    error: 'Error',
+    info: 'Info',
     warning: 'Warning'
 };
 
@@ -23,34 +23,34 @@ function pdToast(type, title, msg, duration) {
     t.innerHTML =
         '<div class="pd-toast-icon"><i class="fas ' + TOAST_ICONS[type] + '"></i></div>' +
         '<div class="pd-toast-body">' +
-            '<div class="pd-toast-title">' + title + '</div>' +
-            '<div class="pd-toast-msg">' + msg + '</div>' +
+        '<div class="pd-toast-title">' + title + '</div>' +
+        '<div class="pd-toast-msg">' + msg + '</div>' +
         '</div>' +
         '<button class="pd-toast-close" onclick="this.closest(\'.pd-toast\').remove()">&#x2715;</button>' +
         '<div class="pd-toast-progress">' +
-            '<div class="pd-toast-progress-bar" style="animation-duration:' + duration + 'ms"></div>' +
+        '<div class="pd-toast-progress-bar" style="animation-duration:' + duration + 'ms"></div>' +
         '</div>';
 
     container.appendChild(t);
 
-    setTimeout(function() {
+    setTimeout(function () {
         t.classList.add('toast-exit');
-        setTimeout(function() { if (t.parentNode) t.remove(); }, 380);
+        setTimeout(function () { if (t.parentNode) t.remove(); }, 380);
     }, duration);
 }
 
 // App state
 let currentView = 'grid';
-let activeNav   = 'drive';
-let allFiles    = [];
-let allFolders  = [];
+let activeNav = 'drive';
+let allFiles = [];
+let allFolders = [];
 let currentFolderId = null;
-let sharedFolderId  = null;
+let sharedFolderId = null;
 let folderStack = [];
 
 document.body.classList.add('light-mode');
 document.body.classList.remove('dark-mode');
-function toggleTheme() {}
+function toggleTheme() { }
 
 function showToast(msg, type = 'info', duration = 2800) {
     const t = document.getElementById('toast');
@@ -65,9 +65,9 @@ function showToast(msg, type = 'info', duration = 2800) {
 function showAuthTab(tab) {
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
-    const tabLogin   = document.getElementById('tabLogin');
-    const tabSignup  = document.getElementById('tabSignup');
-    const heading    = document.getElementById('authHeading');
+    const tabLogin = document.getElementById('tabLogin');
+    const tabSignup = document.getElementById('tabSignup');
+    const heading = document.getElementById('authHeading');
 
     if (tab === 'login') {
         loginForm.classList.add('active');
@@ -89,18 +89,18 @@ function showAuthTab(tab) {
 }
 
 // Password visibility
-window.togglePassword = function(fieldId, icon) {
+window.togglePassword = function (fieldId, icon) {
     const f = document.getElementById(fieldId);
     if (!f) return;
-    if (f.type === 'password') { f.type = 'text';     icon.classList.replace('fa-eye-slash', 'fa-eye'); }
-    else                       { f.type = 'password'; icon.classList.replace('fa-eye', 'fa-eye-slash'); }
+    if (f.type === 'password') { f.type = 'text'; icon.classList.replace('fa-eye-slash', 'fa-eye'); }
+    else { f.type = 'password'; icon.classList.replace('fa-eye', 'fa-eye-slash'); }
 };
 
 // Password match validation
 document.addEventListener('DOMContentLoaded', () => {
-    const pwd     = document.getElementById('signupPassword');
+    const pwd = document.getElementById('signupPassword');
     const confirm = document.getElementById('signupConfirmPassword');
-    const msg     = document.getElementById('passwordMatchMsg');
+    const msg = document.getElementById('passwordMatchMsg');
     if (pwd && confirm && msg) {
         const validate = () => {
             if (!confirm.value.length) { msg.innerHTML = ''; return; }
@@ -120,7 +120,7 @@ function hideInitSpinner() {
     if (spinner) {
         spinner.style.opacity = '0';
         spinner.style.visibility = 'hidden';
-        setTimeout(() => { try { spinner.remove(); } catch(e) {} }, 300);
+        setTimeout(() => { try { spinner.remove(); } catch (e) { } }, 300);
     }
 }
 
@@ -156,7 +156,7 @@ async function checkAuth() {
                 await autoLogin(email, password);
             }
         }
-    } catch(e) { console.error('Auth check failed', e); }
+    } catch (e) { console.error('Auth check failed', e); }
     finally {
         hideInitSpinner();
     }
@@ -190,16 +190,16 @@ async function autoLogin(email, password) {
             }
             startStoragePolling();
         }
-    } catch(e) { console.error('[auth] Auto-login failed', e); }
+    } catch (e) { console.error('[auth] Auto-login failed', e); }
 }
 
 async function login(e) {
     e.preventDefault();
-    const email    = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
     try {
-        const res  = await fetch('/api/auth/login', {
-            method:'POST', headers:{'Content-Type':'application/json'},
+        const res = await fetch('/api/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ email, password })
         });
@@ -230,23 +230,23 @@ async function login(e) {
             // Parallel load for immediate response
             await Promise.all([loadFiles(), loadUserProfile()]);
             startStoragePolling();
-            pdToast('success','Welcome back! 👤', 'You have been signed in successfully.', 4000);
+            pdToast('success', 'Welcome back! 👤', 'You have been signed in successfully.', 4000);
         } else {
             showMessage('authMessage', data.error, 'error');
         }
-    } catch(err) { showMessage('authMessage', 'Network error — is server running?', 'error'); }
+    } catch (err) { showMessage('authMessage', 'Network error — is server running?', 'error'); }
 }
 
 async function signup(e) {
     e.preventDefault();
-    const email    = document.getElementById('signupEmail').value;
+    const email = document.getElementById('signupEmail').value;
     const password = document.getElementById('signupPassword').value;
-    const confirm  = document.getElementById('signupConfirmPassword').value;
+    const confirm = document.getElementById('signupConfirmPassword').value;
     if (password !== confirm) { showMessage('authMessage', 'Passwords do not match', 'error'); return; }
-    if (password.length < 6)  { showMessage('authMessage', 'Password must be at least 6 characters', 'error'); return; }
+    if (password.length < 6) { showMessage('authMessage', 'Password must be at least 6 characters', 'error'); return; }
     try {
-        const res  = await fetch('/api/auth/register', {
-            method:'POST', headers:{'Content-Type':'application/json'},
+        const res = await fetch('/api/auth/register', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ email, password })
         });
@@ -255,11 +255,11 @@ async function signup(e) {
             showMessage('authMessage', 'Account created! Please sign in.', 'success');
             pdToast('success', 'Account Created! 🎉', 'Your Pocket Drive account is ready. Please sign in.', 5000);
             showAuthTab('login');
-            ['signupEmail','signupPassword','signupConfirmPassword'].forEach(id => {
+            ['signupEmail', 'signupPassword', 'signupConfirmPassword'].forEach(id => {
                 const el = document.getElementById(id); if (el) el.value = '';
             });
         } else { showMessage('authMessage', data.error, 'error'); }
-    } catch(err) { showMessage('authMessage', 'Network error', 'error'); }
+    } catch (err) { showMessage('authMessage', 'Network error', 'error'); }
 }
 
 async function logout() {
@@ -267,7 +267,7 @@ async function logout() {
     localStorage.removeItem('pd-email');
     localStorage.removeItem('pd-password');
     stopStoragePolling();
-    await fetch('/api/auth/logout', { method:'POST', credentials: 'include' });
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     const ap = document.getElementById('authPage');
     const pp = document.getElementById('appPage');
     if (ap) ap.style.display = '';
@@ -291,7 +291,7 @@ function showDashboard() {
 // ============================================================
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
-    const main    = document.querySelector('.app-main');
+    const main = document.querySelector('.app-main');
     const isMobile = window.innerWidth <= 900;
 
     if (isMobile) {
@@ -379,7 +379,7 @@ async function loadStorageStats() {
             return;
         }
         updateStorageUI(json.used, json.count, json.total);
-    } catch(e) {
+    } catch (e) {
         console.error('[storage] fetch failed:', e);
         // Fallback to local file list
         updateStorageUI(allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0), allFiles.length);
@@ -388,13 +388,13 @@ async function loadStorageStats() {
 
 function updateStorageUI(usedBytes, count, totalBytes) {
     totalBytes = totalBytes || (15 * 1024 * 1024 * 1024);
-    usedBytes  = Number(usedBytes) || 0;
-    count      = Number(count)     || 0;
-    const pct  = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+    usedBytes = Number(usedBytes) || 0;
+    count = Number(count) || 0;
+    const pct = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
 
-    const fillEl  = document.getElementById('storageBarFill');
-    const pctEl   = document.getElementById('storagePercent');
-    const usedEl  = document.getElementById('storageUsed');
+    const fillEl = document.getElementById('storageBarFill');
+    const pctEl = document.getElementById('storagePercent');
+    const usedEl = document.getElementById('storageUsed');
     const totalEl = document.getElementById('storageTotal');
     const countEl = document.getElementById('storageFileCount');
 
@@ -402,11 +402,11 @@ function updateStorageUI(usedBytes, count, totalBytes) {
         const w = Math.min(Math.max(pct, pct > 0 ? 1 : 0), 100);
         fillEl.style.width = w.toFixed(2) + '%';
         fillEl.classList.remove('warn', 'danger');
-        if (pct >= 85)      fillEl.classList.add('danger');
+        if (pct >= 85) fillEl.classList.add('danger');
         else if (pct >= 60) fillEl.classList.add('warn');
     }
-    if (pctEl)   pctEl.textContent   = pct < 0.1 && pct > 0 ? '<0.1%' : pct.toFixed(1) + '%';
-    if (usedEl)  usedEl.textContent  = formatFileSize(usedBytes);
+    if (pctEl) pctEl.textContent = pct < 0.1 && pct > 0 ? '<0.1%' : pct.toFixed(1) + '%';
+    if (usedEl) usedEl.textContent = formatFileSize(usedBytes);
     if (totalEl) totalEl.textContent = formatFileSize(totalBytes);
     if (countEl) countEl.textContent = count + (count === 1 ? ' file' : ' files');
 }
@@ -430,7 +430,7 @@ function setupDuplicateWarningHandlers() {
     const cancelBtn = document.getElementById('dupCancelBtn');
     const proceedBtn = document.getElementById('dupProceedBtn');
     if (cancelBtn) {
-        cancelBtn.onclick = function() {
+        cancelBtn.onclick = function () {
             closeModal('duplicateWarningModal');
             if (_pendingUploadInput) _pendingUploadInput.value = '';
             showToast('Upload cancelled for duplicate file.', 'info');
@@ -439,7 +439,7 @@ function setupDuplicateWarningHandlers() {
         };
     }
     if (proceedBtn) {
-        proceedBtn.onclick = function() {
+        proceedBtn.onclick = function () {
             closeModal('duplicateWarningModal');
             if (_pendingUploadFile && _pendingUploadInput) {
                 showToast(`⚠️ Uploading duplicate copy of "${_pendingUploadFile.name}"...`, 'warning');
@@ -500,14 +500,14 @@ async function proceedUpload(file, input) {
     }
     const targetFolderId = isSharedView ? (sharedFolderId || currentFolderId) : currentFolderId;
 
-    const progressWrap     = document.getElementById('uploadProgressContainer');
-    const progressBar      = document.getElementById('uploadProgressBar');
-    const progressPct      = document.getElementById('uploadProgressPercent');
+    const progressWrap = document.getElementById('uploadProgressContainer');
+    const progressBar = document.getElementById('uploadProgressBar');
+    const progressPct = document.getElementById('uploadProgressPercent');
     const progressFilename = document.getElementById('progressFilename');
 
-    if (progressWrap)     progressWrap.style.display = 'block';
-    if (progressBar)      { progressBar.style.width = '0%'; progressBar.style.transition = 'width 0.25s ease'; progressBar.classList.remove('upload-processing'); }
-    if (progressPct)      progressPct.textContent    = '0%';
+    if (progressWrap) progressWrap.style.display = 'block';
+    if (progressBar) { progressBar.style.width = '0%'; progressBar.style.transition = 'width 0.25s ease'; progressBar.classList.remove('upload-processing'); }
+    if (progressPct) progressPct.textContent = '0%';
     if (progressFilename) progressFilename.textContent = file.name;
 
     const onUploadSuccess = () => {
@@ -526,7 +526,7 @@ async function proceedUpload(file, input) {
             }, 300);
         }
         showToast(`✅ ${file.name} uploaded!`, 'success');
-        
+
         const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
         if (sharedMatch) {
             const token = sharedMatch[1];
@@ -568,7 +568,7 @@ async function proceedUpload(file, input) {
                 if (e.lengthComputable) {
                     const pct = Math.round((e.loaded / e.total) * 98);
                     if (progressBar) progressBar.style.width = pct + '%';
-                    if (progressPct) progressPct.textContent  = pct + '%';
+                    if (progressPct) progressPct.textContent = pct + '%';
                     if (pct >= 95) {
                         if (progressBar) progressBar.classList.add('upload-processing');
                         if (progressPct) progressPct.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
@@ -597,7 +597,7 @@ async function proceedUpload(file, input) {
                         } else {
                             onUploadError(metaData.error || 'Failed to save file record');
                         }
-                    } catch(err) {
+                    } catch (err) {
                         onUploadError('Failed to record uploaded file');
                     }
                 } else {
@@ -614,7 +614,7 @@ async function proceedUpload(file, input) {
             if (input) input.value = '';
             return;
         }
-    } catch(err) {
+    } catch (err) {
         console.warn('Direct upload setup failed, falling back to standard upload:', err);
     }
 
@@ -630,7 +630,7 @@ async function proceedUpload(file, input) {
         if (e.lengthComputable) {
             const pct = Math.round((e.loaded / e.total) * 95);
             if (progressBar) progressBar.style.width = pct + '%';
-            if (progressPct) progressPct.textContent  = pct + '%';
+            if (progressPct) progressPct.textContent = pct + '%';
             if (pct >= 90) {
                 if (progressBar) progressBar.classList.add('upload-processing');
                 if (progressPct) progressPct.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finalizing…';
@@ -640,7 +640,7 @@ async function proceedUpload(file, input) {
 
     xhr.onload = () => {
         let response = null;
-        try { response = JSON.parse(xhr.responseText); } catch (e) {}
+        try { response = JSON.parse(xhr.responseText); } catch (e) { }
         if (xhr.status === 200 && response && response.success) {
             onUploadSuccess();
         } else {
@@ -717,7 +717,7 @@ async function loadFiles() {
         renderDriveView();
         const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
         updateStorageUI(localUsed, allFiles.length);
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
 }
 
 async function refreshCurrentView() {
@@ -726,7 +726,7 @@ async function refreshCurrentView() {
     try {
         await loadFiles();
         showToast('🔄 View refreshed!', 'success');
-    } catch(e) {
+    } catch (e) {
         showToast('Refresh failed', 'error');
     } finally {
         if (syncIcon) {
@@ -741,8 +741,8 @@ async function refreshCurrentView() {
 function filterFiles(query) {
     if (!query.trim()) { renderDriveView(); return; }
     const q = query.toLowerCase();
-    const filteredFiles    = allFiles.filter(f => f.name.toLowerCase().includes(q));
-    const filteredFolders  = allFolders.filter(f => f.name.toLowerCase().includes(q));
+    const filteredFiles = allFiles.filter(f => f.name.toLowerCase().includes(q));
+    const filteredFolders = allFolders.filter(f => f.name.toLowerCase().includes(q));
     renderDriveView(filteredFolders, filteredFiles);
 }
 
@@ -753,7 +753,7 @@ function formatDateTime(iso) {
 
 function formatFileSize(bytes) {
     if (!bytes || bytes === 0) return '0 B';
-    const units = ['B','KB','MB','GB','TB'];
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + units[i];
 }
@@ -775,31 +775,31 @@ function escapeHtml(str) {
 function getFileIcon(mimeType, fileId, fileName) {
     if (!mimeType) mimeType = '';
     const ext = (fileName || '').split('.').pop().toLowerCase();
-    if (mimeType.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext)) {
+    if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
         return `<img src="/thumbs/${fileId}.webp" onerror="this.onerror=null;this.src='/api/files/preview/${fileId}?thumb=1'" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;">`;
     }
     if (mimeType.includes('pdf') || ext === 'pdf') {
         return `<i class="fas fa-file-pdf" style="font-size:32px;color:#ef4444;"></i>`;
     }
-    if (mimeType.includes('video') || ['mp4','webm','ogg','avi','mov','mkv'].includes(ext)) {
+    if (mimeType.includes('video') || ['mp4', 'webm', 'ogg', 'avi', 'mov', 'mkv'].includes(ext)) {
         return `<i class="fas fa-file-video" style="font-size:32px;color:#0284c7;"></i>`;
     }
-    if (mimeType.includes('audio') || ['mp3','wav','ogg','aac','flac'].includes(ext)) {
+    if (mimeType.includes('audio') || ['mp3', 'wav', 'ogg', 'aac', 'flac'].includes(ext)) {
         return `<i class="fas fa-file-audio" style="font-size:32px;color:#f59e0b;"></i>`;
     }
-    if (mimeType.includes('word') || ['doc','docx'].includes(ext)) {
+    if (mimeType.includes('word') || ['doc', 'docx'].includes(ext)) {
         return `<i class="fas fa-file-word" style="font-size:32px;color:#3b82f6;"></i>`;
     }
-    if (mimeType.includes('excel') || mimeType.includes('spreadsheet') || ['xls','xlsx','csv'].includes(ext)) {
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet') || ['xls', 'xlsx', 'csv'].includes(ext)) {
         return `<i class="fas fa-file-excel" style="font-size:32px;color:#10b981;"></i>`;
     }
-    if (mimeType.includes('powerpoint') || mimeType.includes('presentation') || ['ppt','pptx'].includes(ext)) {
+    if (mimeType.includes('powerpoint') || mimeType.includes('presentation') || ['ppt', 'pptx'].includes(ext)) {
         return `<i class="fas fa-file-powerpoint" style="font-size:32px;color:#ef4444;"></i>`;
     }
-    if (mimeType.startsWith('text/') || ['txt','md','json','js','css','html','xml'].includes(ext)) {
+    if (mimeType.startsWith('text/') || ['txt', 'md', 'json', 'js', 'css', 'html', 'xml'].includes(ext)) {
         return `<i class="fas fa-file-alt" style="font-size:32px;color:#6b7280;"></i>`;
     }
-    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || ['zip','rar','7z','tar','gz'].includes(ext)) {
+    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
         return `<i class="fas fa-file-archive" style="font-size:32px;color:#f59e0b;"></i>`;
     }
     return `<i class="fas fa-file" style="font-size:32px;color:#6b7280;"></i>`;
@@ -816,7 +816,7 @@ async function openFolder(id) {
             const res = await fetch(`/api/folders/share/${id}`, { credentials: 'include' });
             const data = await res.json();
             if (data && data.folderName) name = data.folderName;
-        } catch(e) {}
+        } catch (e) { }
     }
 
     currentFolderId = id;
@@ -865,20 +865,20 @@ function goToStackIndex(i) {
 
 function updateDropzoneLabel() {
     const textEl = document.querySelector('.dropzone-text');
-    const subEl  = document.querySelector('.dropzone-sub');
+    const subEl = document.querySelector('.dropzone-sub');
     if (currentFolderId && folderStack.length > 0) {
         const folderName = folderStack[folderStack.length - 1].name;
         if (textEl) textEl.innerHTML = `Upload into <span class="dropzone-link">${escapeHtml(folderName)}</span>`;
-        if (subEl)  subEl.textContent = 'Files will be saved in this folder • Max 100MB per file';
+        if (subEl) subEl.textContent = 'Files will be saved in this folder • Max 100MB per file';
     } else {
         if (textEl) textEl.innerHTML = 'Drop files here or <span class="dropzone-link">click to upload</span>';
-        if (subEl)  subEl.textContent = 'Any supported file • Max 100MB per file';
+        if (subEl) subEl.textContent = 'Any supported file • Max 100MB per file';
     }
 }
 
 function renderDriveView(folders, files) {
     folders = folders !== undefined ? folders : allFolders;
-    files   = files   !== undefined ? files   : allFiles;
+    files = files !== undefined ? files : allFiles;
     renderBreadcrumbs();
     updateDropzoneLabel();
     const container = document.getElementById('fileList');
@@ -1137,11 +1137,11 @@ async function removeSharedFolder(id, token) {
                     saved = saved.filter(sf => String(sf.id) !== String(id) && sf.share_token !== token);
                     localStorage.setItem(localStorageKey, JSON.stringify(saved));
                 }
-            } catch(e) {}
+            } catch (e) { }
 
             pdToast('success', 'Folder Removed', 'Folder has been removed from Shared with me.', 3000);
             showSharedWithMeView();
-        } catch(err) {
+        } catch (err) {
             console.error('Failed to remove shared folder:', err);
             showToast('Failed to remove folder', 'error');
         }
@@ -1215,7 +1215,7 @@ async function loadSharedEmails(folderId) {
         } else {
             listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-3);">Not shared with any specific email yet.</div>';
         }
-    } catch(e) {
+    } catch (e) {
         listEl.innerHTML = '';
     }
 }
@@ -1236,7 +1236,7 @@ async function updateCollaboratorRole(folderId, email, newRole) {
             showToast(data.error || 'Failed to update permission', 'error');
             loadSharedEmails(folderId);
         }
-    } catch(err) {
+    } catch (err) {
         showToast('Network error', 'error');
         loadSharedEmails(folderId);
     }
@@ -1292,7 +1292,7 @@ async function revokeShareEmail(email) {
         } else {
             showToast(data.error || 'Failed to revoke access', 'error');
         }
-    } catch(err) {
+    } catch (err) {
         showToast('Network error', 'error');
     }
 }
@@ -1325,7 +1325,7 @@ async function showSharedWithMeView() {
             const currentUserEmail = (document.getElementById('userEmail')?.textContent || '').trim().toLowerCase();
             const localStorageKey = currentUserEmail ? `pd_accepted_folders_${currentUserEmail}` : 'pd_accepted_folders_anonymous';
             let localAccepted = JSON.parse(localStorage.getItem(localStorageKey) || '[]');
-            
+
             // Auto clean legacy unscoped key if exists
             localStorage.removeItem('pd_accepted_folders');
 
@@ -1336,7 +1336,7 @@ async function showSharedWithMeView() {
                     }
                 });
             }
-        } catch(e) {}
+        } catch (e) { }
 
         if (sharedFolders.length === 0) {
             if (container) {
@@ -1395,7 +1395,7 @@ async function showSharedWithMeView() {
                 `;
             }).join('');
         }
-    } catch(err) {
+    } catch (err) {
         console.error('Failed to fetch shared items', err);
         if (container) container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger);grid-column:1/-1;">Failed to load shared items.</div>';
     }
@@ -1410,8 +1410,8 @@ function displayFiles(files) { renderDriveView(allFolders, files); }
 function setView(view) {
     currentView = view;
     const container = document.getElementById('fileList');
-    const gridBtn   = document.getElementById('gridViewBtn');
-    const listBtn   = document.getElementById('listViewBtn');
+    const gridBtn = document.getElementById('gridViewBtn');
+    const listBtn = document.getElementById('listViewBtn');
     if (view === 'grid') {
         container?.classList.replace('list-view', 'grid-view') || container?.classList.add('grid-view');
         gridBtn?.classList.add('active'); listBtn?.classList.remove('active');
@@ -1430,7 +1430,7 @@ async function shareFile(id) {
     const type = file ? file.type : '';
     const size = file ? file.size : 0;
     try {
-        const res  = await fetch(`/api/files/share/${id}`);
+        const res = await fetch(`/api/files/share/${id}`);
         const data = await res.json();
         if (!res.ok) { showToast('Could not get share link', 'error'); return; }
 
@@ -1444,7 +1444,7 @@ async function shareFile(id) {
         // Populate modal
         document.getElementById('shareFileName').textContent = name;
         document.getElementById('shareFileMeta').textContent = formatFileSize(data.size || size) + ' • ' + (type || 'File');
-        document.getElementById('shareFileIcon').innerHTML   = getFileIcon(type, id, name);
+        document.getElementById('shareFileIcon').innerHTML = getFileIcon(type, id, name);
 
         // Image preview section — show thumbnail + link together
         const isImage = type && type.startsWith('image/');
@@ -1462,9 +1462,9 @@ async function shareFile(id) {
         // Share link = public preview URL
         document.getElementById('shareLinkInput').value = publicShareUrl;
 
-        const openLink     = document.getElementById('shareOpenLink');
+        const openLink = document.getElementById('shareOpenLink');
         const downloadLink = document.getElementById('shareDownloadLink');
-        if (openLink)     { openLink.href = publicShareUrl; openLink.target = '_blank'; }
+        if (openLink) { openLink.href = publicShareUrl; openLink.target = '_blank'; }
         if (downloadLink) { downloadLink.href = publicDownloadUrl; downloadLink.removeAttribute('target'); }
 
         // Reset copy button
@@ -1472,14 +1472,14 @@ async function shareFile(id) {
         if (copyBtn) { copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy'; copyBtn.classList.remove('copied'); }
 
         openModal('shareModal');
-    } catch(err) {
+    } catch (err) {
         showToast('Failed to get share link', 'error');
         console.error(err);
     }
 }
 
 function copyShareLink() {
-    const input   = document.getElementById('shareLinkInput');
+    const input = document.getElementById('shareLinkInput');
     const copyBtn = document.getElementById('shareCopyBtn');
     if (!input) return;
 
@@ -1509,18 +1509,18 @@ async function previewFile(id) {
     const name = file ? file.name : 'File';
     const type = file ? file.type : '';
 
-    const modal   = document.getElementById('previewModal');
-    const title   = document.getElementById('previewFileName');
+    const modal = document.getElementById('previewModal');
+    const title = document.getElementById('previewFileName');
     const content = document.getElementById('previewContent');
-    if (title)   title.innerHTML  = `<i class="fas fa-eye"></i> ${escapeHtml(name)}`;
+    if (title) title.innerHTML = `<i class="fas fa-eye"></i> ${escapeHtml(name)}`;
     if (content) content.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-2)"><i class="fas fa-spinner fa-spin"></i> Loading preview…</div>';
     openModal('previewModal');
 
     const ext = name.split('.').pop().toLowerCase();
-    const isOffice = ['doc','docx','xls','xlsx','ppt','pptx'].includes(ext) || 
-                     type.includes('word') || type.includes('excel') || type.includes('spreadsheet') || type.includes('powerpoint') || type.includes('presentation');
-    const isVideo = type.startsWith('video/') || ['mp4','webm','ogg','avi','mov','mkv'].includes(ext);
-    const isAudio = type.startsWith('audio/') || ['mp3','wav','ogg','aac','flac'].includes(ext);
+    const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext) ||
+        type.includes('word') || type.includes('excel') || type.includes('spreadsheet') || type.includes('powerpoint') || type.includes('presentation');
+    const isVideo = type.startsWith('video/') || ['mp4', 'webm', 'ogg', 'avi', 'mov', 'mkv'].includes(ext);
+    const isAudio = type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'aac', 'flac'].includes(ext);
 
     try {
         // For MS Office or Video/Audio files, fetch the public Supabase direct URL
@@ -1545,21 +1545,21 @@ async function previewFile(id) {
             const res = await fetch(`/api/files/preview/${id}`, { credentials: 'include' });
             if (!res.ok) throw new Error('Preview failed');
             const blob = await res.blob();
-            const url  = URL.createObjectURL(blob);
+            const url = URL.createObjectURL(blob);
             content.dataset.blobUrl = url;
 
             if (type.startsWith('image/')) {
                 content.innerHTML = `<img src="${url}" alt="${escapeHtml(name)}">`;
             } else if (type === 'application/pdf' || ext === 'pdf') {
                 content.innerHTML = `<iframe src="${url}" style="width:100%;height:68vh;border:none;"></iframe>`;
-            } else if (type.startsWith('text/') || ['txt','md','json','js','css','html','xml'].includes(ext)) {
+            } else if (type.startsWith('text/') || ['txt', 'md', 'json', 'js', 'css', 'html', 'xml'].includes(ext)) {
                 const text = await blob.text();
                 content.innerHTML = `<pre style="text-align:left;white-space:pre-wrap;color:var(--text-1);background:var(--bg-input);padding:16px;border-radius:10px;max-height:60vh;overflow:auto;">${escapeHtml(text)}</pre>`;
             } else {
                 content.innerHTML = `<p style="color:var(--text-2);padding:24px;">Preview not available for this file type. <br><button class="btn-primary btn-small" onclick="downloadFile(${id})" style="margin-top:12px;"><i class="fas fa-download"></i> Download</button></p>`;
             }
         }
-    } catch(err) {
+    } catch (err) {
         console.error(err);
         if (content) content.innerHTML = `<p style="color:var(--danger);padding:20px;">Error loading preview: ${err.message}</p>`;
     }
@@ -1573,22 +1573,22 @@ function closePreviewModal() {
 }
 
 async function previewSharedFile(id, name, type) {
-    const modal   = document.getElementById('previewModal');
-    const title   = document.getElementById('previewFileName');
+    const modal = document.getElementById('previewModal');
+    const title = document.getElementById('previewFileName');
     const content = document.getElementById('previewContent');
-    if (title)   title.innerHTML  = `<i class="fas fa-eye"></i> ${escapeHtml(name)}`;
+    if (title) title.innerHTML = `<i class="fas fa-eye"></i> ${escapeHtml(name)}`;
     if (content) content.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-2)"><i class="fas fa-spinner fa-spin"></i> Loading preview…</div>';
     openModal('previewModal');
 
     const ext = name.split('.').pop().toLowerCase();
-    const isOffice = ['doc','docx','xls','xlsx','ppt','pptx'].includes(ext) || 
-                     type.includes('word') || type.includes('excel') || type.includes('spreadsheet') || type.includes('powerpoint') || type.includes('presentation');
-    const isVideo = type.startsWith('video/') || ['mp4','webm','ogg','avi','mov','mkv'].includes(ext);
-    const isAudio = type.startsWith('audio/') || ['mp3','wav','ogg','aac','flac'].includes(ext);
+    const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext) ||
+        type.includes('word') || type.includes('excel') || type.includes('spreadsheet') || type.includes('powerpoint') || type.includes('presentation');
+    const isVideo = type.startsWith('video/') || ['mp4', 'webm', 'ogg', 'avi', 'mov', 'mkv'].includes(ext);
+    const isAudio = type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'aac', 'flac'].includes(ext);
 
     try {
         const previewUrl = `/api/files/public/preview/${id}`;
-        
+
         if (isOffice) {
             const res = await fetch(`/api/files/public/${id}`);
             const fileData = await res.json();
@@ -1603,7 +1603,7 @@ async function previewSharedFile(id, name, type) {
             content.innerHTML = `<img src="${previewUrl}" alt="${escapeHtml(name)}" style="max-width:100%;max-height:68vh;object-fit:contain;display:block;margin:0 auto;">`;
         } else if (type === 'application/pdf' || ext === 'pdf') {
             content.innerHTML = `<iframe src="${previewUrl}" style="width:100%;height:68vh;border:none;"></iframe>`;
-        } else if (type.startsWith('text/') || ['txt','md','json','js','css','html','xml'].includes(ext)) {
+        } else if (type.startsWith('text/') || ['txt', 'md', 'json', 'js', 'css', 'html', 'xml'].includes(ext)) {
             const res = await fetch(previewUrl);
             if (!res.ok) throw new Error('Preview failed');
             const text = await res.text();
@@ -1611,7 +1611,7 @@ async function previewSharedFile(id, name, type) {
         } else {
             content.innerHTML = `<p style="color:var(--text-2);padding:24px;">Preview not available for this file type. <br><a class="btn-primary btn-small" href="/api/files/public/download/${id}" download style="margin-top:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> Download</a></p>`;
         }
-    } catch(err) {
+    } catch (err) {
         console.error(err);
         if (content) content.innerHTML = `<p style="color:var(--danger);padding:20px;">Error loading preview: ${err.message}</p>`;
     }
@@ -1624,10 +1624,10 @@ function downloadFile(id) { window.open(`/api/files/download/${id}`, '_blank'); 
 async function deleteFile(id) {
     const proceed = await showConfirmDialog('Move to Trash', 'Are you sure you want to move this file to the trash?', true);
     if (!proceed) return;
-    const res = await fetch(`/api/files/delete/${id}`, { method:'DELETE', credentials: 'include' });
+    const res = await fetch(`/api/files/delete/${id}`, { method: 'DELETE', credentials: 'include' });
     if (res.ok) {
         showToast('Moved to trash', 'success');
-        
+
         // Check if currently inside a shared folder view
         const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
         if (sharedMatch) {
@@ -1655,7 +1655,7 @@ async function loadTrash() {
     try {
         const res = await fetch('/api/files/trash', { credentials: 'include' });
         if (res.ok) displayTrash(await res.json());
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
 }
 
 // Internal trash state for optimistic updates
@@ -1751,7 +1751,7 @@ async function trashDeleteSelected() {
                 const data = await res.json();
                 deletedIds = (data.deletedIds || ids).map(String);
             }
-        } catch(batchErr) {
+        } catch (batchErr) {
             console.warn('[trashDeleteSelected] Batch failed, trying individual fallback:', batchErr);
         }
 
@@ -1764,7 +1764,7 @@ async function trashDeleteSelected() {
                     const res = await fetch(`/api/files/permanent/${id}`, { method: 'DELETE', credentials: 'include', signal: c.signal });
                     clearTimeout(t);
                     return res.ok ? id : null;
-                } catch(e) {
+                } catch (e) {
                     return null;
                 }
             });
@@ -1822,7 +1822,7 @@ async function restoreFile(id, btnEl) {
     if (row) row.style.opacity = '0.4';
     if (btnEl) btnEl.disabled = true;
     try {
-        const res = await fetch(`/api/files/restore/${id}`, { method:'POST', credentials: 'include' });
+        const res = await fetch(`/api/files/restore/${id}`, { method: 'POST', credentials: 'include' });
         if (res.ok) {
             // Remove from internal state and DOM
             _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
@@ -1841,7 +1841,7 @@ async function restoreFile(id, btnEl) {
             if (btnEl) btnEl.disabled = false;
             showToast('Restore failed', 'error');
         }
-    } catch(e) {
+    } catch (e) {
         if (row) row.style.opacity = '1';
         if (btnEl) btnEl.disabled = false;
         showToast('Restore failed: Network error', 'error');
@@ -1862,7 +1862,7 @@ async function permanentDeleteFile(id, btnEl) {
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(`/api/files/permanent/${id}`, { method:'DELETE', credentials: 'include', signal: controller.signal });
+        const res = await fetch(`/api/files/permanent/${id}`, { method: 'DELETE', credentials: 'include', signal: controller.signal });
         clearTimeout(timeoutId);
         if (res.ok) {
             _trashFiles = _trashFiles.filter(f => String(f.id) !== String(id));
@@ -1885,7 +1885,7 @@ async function permanentDeleteFile(id, btnEl) {
             }
             showToast('Delete failed', 'error');
         }
-    } catch(e) {
+    } catch (e) {
         if (row) row.style.opacity = '1';
         if (btnEl) {
             btnEl.disabled = false;
@@ -1935,18 +1935,18 @@ async function loadUserProfile() {
             if (dropdownAvatarEl) dropdownAvatarEl.src = newSrc;
         }
         window.currentProfile = user;
-    } catch(e) { console.error('Profile load failed', e); }
+    } catch (e) { console.error('Profile load failed', e); }
 }
 
 function openProfileModal() {
-    const modalPic  = document.getElementById('modalProfilePic');
+    const modalPic = document.getElementById('modalProfilePic');
     const nameInput = document.getElementById('profileNameInput');
     if (window.currentProfile) {
-        if (modalPic)   modalPic.src    = window.currentProfile.profile_picture || '/uploads/default-avatar.png';
-        if (nameInput)  nameInput.value = window.currentProfile.name || '';
+        if (modalPic) modalPic.src = window.currentProfile.profile_picture || '/uploads/default-avatar.png';
+        if (nameInput) nameInput.value = window.currentProfile.name || '';
     } else {
-        if (modalPic)   modalPic.src    = '/uploads/default-avatar.png';
-        if (nameInput)  nameInput.value = '';
+        if (modalPic) modalPic.src = '/uploads/default-avatar.png';
+        if (nameInput) nameInput.value = '';
     }
     const pmsg = document.getElementById('profileMessage'); if (pmsg) pmsg.innerHTML = '';
     openModal('profileModal');
@@ -1964,7 +1964,7 @@ function showProfileMessage(msg, type) {
 async function updateProfileName() {
     const name = document.getElementById('profileNameInput')?.value.trim();
     if (!name) { showProfileMessage('Name cannot be empty', 'error'); return; }
-    const res = await fetch('/api/auth/profile/name', { method:'PUT', headers:{'Content-Type':'application/json'}, credentials: 'include', body:JSON.stringify({ name }) });
+    const res = await fetch('/api/auth/profile/name', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ name }) });
     if (res.ok) {
         showProfileMessage('Name updated!', 'success');
         const el = document.getElementById('userName'); if (el) el.textContent = name;
@@ -1979,7 +1979,7 @@ async function updateProfileName() {
 async function uploadProfilePicture(input) {
     const file = input.files[0]; if (!file) return;
     const fd = new FormData(); fd.append('profile_pic', file);
-    const res  = await fetch('/api/auth/profile/picture', { method:'POST', credentials: 'include', body:fd });
+    const res = await fetch('/api/auth/profile/picture', { method: 'POST', credentials: 'include', body: fd });
     const data = await res.json();
     if (res.ok) {
         showProfileMessage('Picture updated!', 'success');
@@ -1995,7 +1995,7 @@ async function uploadProfilePicture(input) {
 
 // Change password
 function changePasswordDialog() {
-    ['currentPassword','newPasswordModal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['currentPassword', 'newPasswordModal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const msg = document.getElementById('changePasswordMessage'); if (msg) msg.innerHTML = '';
     openModal('changePasswordModal');
 }
@@ -2006,7 +2006,7 @@ async function submitChangePassword() {
     const newp = document.getElementById('newPasswordModal')?.value;
     if (!curr || !newp) { showMessage('changePasswordMessage', 'Please fill all fields', 'error'); return; }
     if (newp.length < 6) { showMessage('changePasswordMessage', 'Min 6 characters', 'error'); return; }
-    const res  = await fetch('/api/auth/change-password', { method:'POST', headers:{'Content-Type':'application/json'}, credentials: 'include', body:JSON.stringify({ currentPassword:curr, newPassword:newp }) });
+    const res = await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ currentPassword: curr, newPassword: newp }) });
     const data = await res.json();
     if (res.ok) {
         showMessage('changePasswordMessage', 'Password changed successfully!', 'success');
@@ -2278,11 +2278,11 @@ function showMessage(id, msg, type) {
 // Confirmation dialog
 function showConfirmDialog(title, message, isDanger = true) {
     return new Promise((resolve) => {
-        const modal     = document.getElementById('confirmModal');
-        const titleEl   = document.getElementById('confirmTitle');
-        const msgEl     = document.getElementById('confirmMessage');
-        const iconEl    = document.getElementById('confirmIcon');
-        const yesBtn    = document.getElementById('confirmYesBtn');
+        const modal = document.getElementById('confirmModal');
+        const titleEl = document.getElementById('confirmTitle');
+        const msgEl = document.getElementById('confirmMessage');
+        const iconEl = document.getElementById('confirmIcon');
+        const yesBtn = document.getElementById('confirmYesBtn');
         const cancelBtn = document.getElementById('confirmCancelBtn');
 
         if (!modal || !yesBtn || !cancelBtn) {
@@ -2291,24 +2291,24 @@ function showConfirmDialog(title, message, isDanger = true) {
         }
 
         titleEl.textContent = title || 'Are you sure?';
-        msgEl.textContent   = message || 'Do you want to proceed?';
+        msgEl.textContent = message || 'Do you want to proceed?';
 
         if (isDanger) {
             iconEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
             iconEl.style.background = 'rgba(239, 68, 68, 0.08)';
-            iconEl.style.color      = 'var(--danger)';
+            iconEl.style.color = 'var(--danger)';
             iconEl.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-            yesBtn.style.background  = 'var(--danger)';
-            yesBtn.style.boxShadow   = 'none';
-            yesBtn.textContent       = 'Yes, Delete';
+            yesBtn.style.background = 'var(--danger)';
+            yesBtn.style.boxShadow = 'none';
+            yesBtn.textContent = 'Yes, Delete';
         } else {
             iconEl.innerHTML = '<i class="fas fa-info-circle"></i>';
             iconEl.style.background = 'var(--accent-sub)';
-            iconEl.style.color      = 'var(--accent)';
+            iconEl.style.color = 'var(--accent)';
             iconEl.style.borderColor = 'var(--border-accent)';
-            yesBtn.style.background  = 'var(--accent)';
-            yesBtn.style.boxShadow   = 'none';
-            yesBtn.textContent       = 'Confirm';
+            yesBtn.style.background = 'var(--accent)';
+            yesBtn.style.boxShadow = 'none';
+            yesBtn.textContent = 'Confirm';
         }
 
         openModal('confirmModal');
@@ -2360,7 +2360,7 @@ async function checkPublicShareRoute() {
                 await showSharedFolderLoggedIn(token, userData);
                 return true;
             }
-        } catch(e) {}
+        } catch (e) { }
 
         // Not logged in — show public preview
         showPublicPreviewLayout();
@@ -2375,11 +2375,11 @@ async function checkPublicShareRoute() {
 async function showSharedFolderLoggedIn(token, userData) {
     // Show full app dashboard with sidebar
     const authPage = document.getElementById('authPage');
-    const appPage  = document.getElementById('appPage');
-    const pubPage  = document.getElementById('publicPreviewPage');
+    const appPage = document.getElementById('appPage');
+    const pubPage = document.getElementById('publicPreviewPage');
     if (authPage) authPage.style.display = 'none';
-    if (appPage)  appPage.style.display  = 'flex';
-    if (pubPage)  pubPage.style.display  = 'none';
+    if (appPage) appPage.style.display = 'flex';
+    if (pubPage) pubPage.style.display = 'none';
 
     // Hide loader immediately so layout is interactive
     hideInitSpinner();
@@ -2413,7 +2413,7 @@ async function showSharedFolderLoggedIn(token, userData) {
     if (oldUpload) oldUpload.remove();
 
     try {
-        const res  = await fetch(`/api/folders/public/${token}`);
+        const res = await fetch(`/api/folders/public/${token}`);
         const data = await res.json();
 
         if (!res.ok || !data || data.error) {
@@ -2461,7 +2461,7 @@ async function showSharedFolderLoggedIn(token, userData) {
                 </label>
                 <input type="file" id="inAppFolderFileInput" style="display:none;" onchange="uploadFile(this)">
                 <p style="margin:0;font-size:0.82rem;color:var(--text-2);">Files will be added to <strong>${escapeHtml(data.folder.name)}</strong></p>`;
-            
+
             container.parentNode.insertBefore(uploadDiv, container);
         }
 
@@ -2505,7 +2505,7 @@ async function showSharedFolderLoggedIn(token, userData) {
             }
         }
 
-    } catch(err) {
+    } catch (err) {
         console.error('Failed to load shared folder in app:', err);
         if (container) container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);grid-column:1/-1;"><i class="fas fa-exclamation-triangle fa-2x"></i><p style="margin-top:12px;">Failed to load shared folder.</p></div>';
     }
@@ -2513,26 +2513,26 @@ async function showSharedFolderLoggedIn(token, userData) {
 
 function showPublicPreviewLayout() {
     const authPage = document.getElementById('authPage');
-    const appPage  = document.getElementById('appPage');
-    const pubPage  = document.getElementById('publicPreviewPage');
+    const appPage = document.getElementById('appPage');
+    const pubPage = document.getElementById('publicPreviewPage');
     if (authPage) authPage.style.display = 'none';
-    if (appPage)  appPage.style.display  = 'none';
-    if (pubPage)  pubPage.style.display  = 'flex';
+    if (appPage) appPage.style.display = 'none';
+    if (pubPage) pubPage.style.display = 'flex';
 }
 
 async function loadPublicFilePreview(fileId) {
-    const loading    = document.getElementById('publicLoading');
-    const errorBox   = document.getElementById('publicError');
+    const loading = document.getElementById('publicLoading');
+    const errorBox = document.getElementById('publicError');
     const contentBox = document.getElementById('publicContent');
-    const folderBox  = document.getElementById('publicFolderContent');
+    const folderBox = document.getElementById('publicFolderContent');
 
-    if (loading)    loading.style.display    = 'block';
-    if (errorBox)   errorBox.style.display   = 'none';
+    if (loading) loading.style.display = 'block';
+    if (errorBox) errorBox.style.display = 'none';
     if (contentBox) contentBox.style.display = 'none';
-    if (folderBox)  folderBox.style.display  = 'none';
+    if (folderBox) folderBox.style.display = 'none';
 
     try {
-        const res  = await fetch(`/api/files/public/${fileId}`);
+        const res = await fetch(`/api/files/public/${fileId}`);
         const file = await res.json();
 
         if (!res.ok || !file || file.error) {
@@ -2550,31 +2550,31 @@ async function loadPublicFilePreview(fileId) {
         const typeEl = document.getElementById('pubFileType');
         const sizeEl = document.getElementById('pubFileSize');
         const dateEl = document.getElementById('pubFileDate');
-        const dlBtn  = document.getElementById('pubDownloadBtn');
+        const dlBtn = document.getElementById('pubDownloadBtn');
 
         const fileName = file.name || 'Shared File';
         const fileType = file.type || 'application/octet-stream';
         const fileSize = file.size || 0;
-        const publicPreviewUrl  = `/api/files/public/preview/${fileId}`;
+        const publicPreviewUrl = `/api/files/public/preview/${fileId}`;
         const publicDownloadUrl = `/api/files/public/download/${fileId}`;
 
         if (nameEl) nameEl.textContent = fileName;
         if (typeEl) typeEl.textContent = (fileName.split('.').pop() || 'file').toUpperCase();
         if (sizeEl) sizeEl.textContent = formatFileSize(fileSize);
         if (dateEl) dateEl.textContent = file.uploaded_at ? new Date(file.uploaded_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
-        if (iconEl) iconEl.innerHTML   = getFileIcon(fileType, fileId, fileName);
+        if (iconEl) iconEl.innerHTML = getFileIcon(fileType, fileId, fileName);
 
-        if (dlBtn)  dlBtn.href  = publicDownloadUrl;
+        if (dlBtn) dlBtn.href = publicDownloadUrl;
 
         // Render Media Preview
         renderPublicMediaPreview(fileId, fileName, fileType, file.url || publicPreviewUrl);
 
-        if (loading)    loading.style.display    = 'none';
+        if (loading) loading.style.display = 'none';
         if (contentBox) contentBox.style.display = 'block';
 
     } catch (err) {
         console.error('Failed to load public file preview:', err);
-        if (loading)  loading.style.display  = 'none';
+        if (loading) loading.style.display = 'none';
         if (errorBox) errorBox.style.display = 'block';
     }
 }
@@ -2587,15 +2587,15 @@ function renderPublicMediaPreview(fileId, fileName, mimeType, directUrl) {
     const ext = fileName.split('.').pop().toLowerCase();
     const publicPreviewUrl = `/api/files/public/preview/${fileId}`;
 
-    if (mimeType.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext)) {
+    if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
         mediaBox.innerHTML = `<img src="${publicPreviewUrl}" alt="${escapeHtml(fileName)}" onclick="window.open('${directUrl}','_blank')" title="Click to view full size">`;
-    } else if (mimeType.startsWith('video/') || ['mp4','webm','ogg','mov','mkv'].includes(ext)) {
+    } else if (mimeType.startsWith('video/') || ['mp4', 'webm', 'ogg', 'mov', 'mkv'].includes(ext)) {
         mediaBox.innerHTML = `<video controls playsinline preload="metadata" src="${publicPreviewUrl}"></video>`;
-    } else if (mimeType.startsWith('audio/') || ['mp3','wav','ogg','m4a','aac'].includes(ext)) {
+    } else if (mimeType.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac'].includes(ext)) {
         mediaBox.innerHTML = `<audio controls src="${publicPreviewUrl}"></audio>`;
     } else if (mimeType === 'application/pdf' || ext === 'pdf') {
         mediaBox.innerHTML = `<iframe src="${publicPreviewUrl}"></iframe>`;
-    } else if (['txt','js','json','html','css','py','md','csv','xml','c','cpp','java','log'].includes(ext) || mimeType.startsWith('text/')) {
+    } else if (['txt', 'js', 'json', 'html', 'css', 'py', 'md', 'csv', 'xml', 'c', 'cpp', 'java', 'log'].includes(ext) || mimeType.startsWith('text/')) {
         mediaBox.innerHTML = `<div class="public-loading"><i class="fas fa-spinner fa-spin"></i> Loading text content…</div>`;
         fetch(publicPreviewUrl)
             .then(res => res.text())
@@ -2617,18 +2617,18 @@ function renderPublicMediaPreview(fileId, fileName, mimeType, directUrl) {
 }
 
 async function loadPublicFolderPreview(token) {
-    const loading    = document.getElementById('publicLoading');
-    const errorBox   = document.getElementById('publicError');
+    const loading = document.getElementById('publicLoading');
+    const errorBox = document.getElementById('publicError');
     const contentBox = document.getElementById('publicContent');
-    const folderBox  = document.getElementById('publicFolderContent');
+    const folderBox = document.getElementById('publicFolderContent');
 
-    if (loading)    loading.style.display    = 'block';
-    if (errorBox)   errorBox.style.display   = 'none';
+    if (loading) loading.style.display = 'block';
+    if (errorBox) errorBox.style.display = 'none';
     if (contentBox) contentBox.style.display = 'none';
-    if (folderBox)  folderBox.style.display  = 'none';
+    if (folderBox) folderBox.style.display = 'none';
 
     try {
-        const res  = await fetch(`/api/folders/public/${token}`);
+        const res = await fetch(`/api/folders/public/${token}`);
         const data = await res.json();
 
         if (!res.ok || !data || data.error) {
@@ -2646,9 +2646,9 @@ async function loadPublicFolderPreview(token) {
             sharedFolderId = data.folder.id;
         }
 
-        const nameEl  = document.getElementById('pubFolderName');
+        const nameEl = document.getElementById('pubFolderName');
         const countEl = document.getElementById('pubFolderFileCount');
-        const listEl  = document.getElementById('pubFolderFileList');
+        const listEl = document.getElementById('pubFolderFileList');
 
         // Check if already accepted (localStorage)
         const currentUserEmail = (document.getElementById('userEmail')?.textContent || '').trim().toLowerCase();
@@ -2726,12 +2726,12 @@ async function loadPublicFolderPreview(token) {
             }
         }
 
-        if (loading)   loading.style.display   = 'none';
+        if (loading) loading.style.display = 'none';
         if (folderBox) folderBox.style.display = 'block';
 
     } catch (err) {
         console.error('Failed to load public folder preview:', err);
-        if (loading)  loading.style.display  = 'none';
+        if (loading) loading.style.display = 'none';
         if (errorBox) errorBox.style.display = 'block';
     }
 }
@@ -2764,7 +2764,7 @@ async function acceptSharedFolderInvitation(token) {
                     });
                     localStorage.setItem(localStorageKey, JSON.stringify(saved));
                 }
-            } catch(e) {}
+            } catch (e) { }
 
             pdToast('success', 'Invitation Accepted! 🎉', data.message || 'Folder added to Shared with me.', 4000);
             setTimeout(() => {
@@ -2777,7 +2777,7 @@ async function acceptSharedFolderInvitation(token) {
                 window.location.href = '/';
             }, 1500);
         }
-    } catch(err) {
+    } catch (err) {
         pdToast('warning', 'Login Required', 'Please log in to accept this invitation.', 3000);
         sessionStorage.setItem('pd_post_login_redirect', window.location.pathname);
         setTimeout(() => {
@@ -2825,28 +2825,28 @@ window.addEventListener('popstate', async () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Shared State ─────────────────────────────────────────────────────────────
-let _aiAllFiles       = [];
+let _aiAllFiles = [];
 let _aiPickerCallback = null;
-let _aiPickerFilter   = null;
+let _aiPickerFilter = null;
 let _ocrCurrentFileId = null;
 let _summaryCurrentFileId = null;
 let _ocrExtractedText = '';
-let _summaryText      = '';
+let _summaryText = '';
 
 // ── Helper: format bytes ──────────────────────────────────────────────────────
 function aiFormatBytes(b) {
     if (!b) return '0 B';
     if (b < 1024) return b + ' B';
-    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-    return (b/1048576).toFixed(1) + ' MB';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
 }
 
 // ── Helper: get file type icon & color ───────────────────────────────────────
 function aiFileIcon(mime, name) {
     const ext = (name || '').split('.').pop().toLowerCase();
-    if ((mime||'').startsWith('image/')) return { icon: 'fa-image', color: '#8b5cf6' };
+    if ((mime || '').startsWith('image/')) return { icon: 'fa-image', color: '#8b5cf6' };
     if (ext === 'pdf' || mime === 'application/pdf') return { icon: 'fa-file-pdf', color: '#ef4444' };
-    if (['doc','docx'].includes(ext)) return { icon: 'fa-file-word', color: '#3b82f6' };
+    if (['doc', 'docx'].includes(ext)) return { icon: 'fa-file-word', color: '#3b82f6' };
     if (['txt'].includes(ext)) return { icon: 'fa-file-alt', color: '#64748b' };
     return { icon: 'fa-file', color: '#64748b' };
 }
@@ -2891,7 +2891,7 @@ async function aiLoadFolderOptions(selectId) {
                 sel.appendChild(opt);
             });
         }
-    } catch(e) {}
+    } catch (e) { }
 }
 
 // ── Fetch all user files for AI file picker ───────────────────────────────────
@@ -2909,12 +2909,12 @@ async function aiLoadAllFiles() {
             const data = await resp.json();
             if (Array.isArray(data)) _aiAllFiles = data;
         }
-    } catch(e) { _aiAllFiles = []; }
+    } catch (e) { _aiAllFiles = []; }
 }
 
 // ── Attach click handlers to AI file pickers (called once after DOM ready) ───
 let _aiPickersAttached = false;
-let _aiPickerCategory  = 'all';
+let _aiPickerCategory = 'all';
 
 function attachAIPickerEvents() {
     if (_aiPickersAttached) return;
@@ -2923,12 +2923,12 @@ function attachAIPickerEvents() {
     // Convert to PDF picker
     const picker = document.getElementById('convertFilePicker');
     if (picker) {
-        picker.addEventListener('click', function(e) {
+        picker.addEventListener('click', function (e) {
             if (e.target.closest('.ai-clear-btn')) return;
-            openAIFilePicker(function(file) {
+            openAIFilePicker(function (file) {
                 document.getElementById('convertFileId').value = file.id;
                 document.getElementById('convertSelectedName').textContent = file.name;
-                const isImg = (file.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+                const isImg = (file.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
                 const thumbEl = document.getElementById('convertSelectedThumb');
                 if (thumbEl) {
                     if (isImg) {
@@ -2950,12 +2950,12 @@ function attachAIPickerEvents() {
     // OCR picker
     const ocrPicker = document.getElementById('ocrFilePicker');
     if (ocrPicker) {
-        ocrPicker.addEventListener('click', function(e) {
+        ocrPicker.addEventListener('click', function (e) {
             if (e.target.closest('.ai-clear-btn')) return;
-            openAIFilePicker(function(file) {
+            openAIFilePicker(function (file) {
                 document.getElementById('ocrFileId').value = file.id;
                 document.getElementById('ocrSelectedName').textContent = file.name;
-                const isImg = (file.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+                const isImg = (file.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
                 const thumbEl = document.getElementById('ocrSelectedThumb');
                 if (thumbEl) {
                     if (isImg) {
@@ -2979,9 +2979,9 @@ function attachAIPickerEvents() {
     // Summary picker
     const sumPicker = document.getElementById('summaryFilePicker');
     if (sumPicker) {
-        sumPicker.addEventListener('click', function(e) {
+        sumPicker.addEventListener('click', function (e) {
             if (e.target.closest('.ai-clear-btn')) return;
-            openAIFilePicker(function(file) {
+            openAIFilePicker(function (file) {
                 document.getElementById('summaryFileId').value = file.id;
                 document.getElementById('summarySelectedName').textContent = file.name;
                 const thumbEl = document.getElementById('summarySelectedThumb');
@@ -3009,7 +3009,7 @@ attachAIPickerEvents();
 // ═══════════════════════════════════════════════════════════════════════════════
 async function openAIFilePicker(callback, filterType) {
     _aiPickerCallback = callback;
-    _aiPickerFilter   = filterType || null;
+    _aiPickerFilter = filterType || null;
     _aiPickerCategory = 'all';
 
     // Reset tabs: display all by default
@@ -3022,8 +3022,8 @@ async function openAIFilePicker(callback, filterType) {
 
     // Context-sensitive tabs per tool
     const tabImage = document.getElementById('tab-image');
-    const tabPdf   = document.getElementById('tab-pdf');
-    const tabDocx  = document.getElementById('tab-docx');
+    const tabPdf = document.getElementById('tab-pdf');
+    const tabDocx = document.getElementById('tab-docx');
 
     if (_aiPickerFilter === 'convertable') {
         // Converting TO PDF: You cannot convert an existing PDF to PDF, so remove the PDFs tab!
@@ -3052,7 +3052,7 @@ async function openAIFilePicker(callback, filterType) {
         await aiLoadAllFiles();
     }
     renderAIFilePicker('');
-    setTimeout(function() {
+    setTimeout(function () {
         if (searchInput) searchInput.focus();
     }, 150);
 }
@@ -3090,55 +3090,55 @@ function renderAIFilePicker(query) {
 
     // Filter by tool requirement
     if (_aiPickerFilter === 'image') {
-        files = files.filter(f => (f.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(f.name||''));
+        files = files.filter(f => (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(f.name || ''));
     } else if (_aiPickerFilter === 'pdf') {
-        files = files.filter(f => f.type === 'application/pdf' || (f.name||'').toLowerCase().endsWith('.pdf'));
+        files = files.filter(f => f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
     } else if (_aiPickerFilter === 'pdfdocx') {
         files = files.filter(f =>
-            (f.type||'').startsWith('image/') === false && (
+            (f.type || '').startsWith('image/') === false && (
                 f.type === 'application/pdf' ||
-                (f.name||'').toLowerCase().endsWith('.pdf') ||
-                (f.name||'').toLowerCase().endsWith('.docx') ||
-                (f.name||'').toLowerCase().endsWith('.doc') ||
+                (f.name || '').toLowerCase().endsWith('.pdf') ||
+                (f.name || '').toLowerCase().endsWith('.docx') ||
+                (f.name || '').toLowerCase().endsWith('.doc') ||
                 f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
                 f.type === 'text/plain' ||
-                (f.name||'').toLowerCase().endsWith('.txt')
+                (f.name || '').toLowerCase().endsWith('.txt')
             )
         );
     } else if (_aiPickerFilter === 'convertable') {
         // Exclude PDFs strictly: only images and Word docs can be converted to PDF
         files = files.filter(f =>
             f.type !== 'application/pdf' &&
-            !(f.name||'').toLowerCase().endsWith('.pdf') && (
-                (f.type||'').startsWith('image/') ||
-                /\.(jpe?g|png|webp|bmp)$/i.test(f.name||'') ||
-                (f.name||'').toLowerCase().endsWith('.docx') ||
-                (f.name||'').toLowerCase().endsWith('.doc') ||
+            !(f.name || '').toLowerCase().endsWith('.pdf') && (
+                (f.type || '').startsWith('image/') ||
+                /\.(jpe?g|png|webp|bmp)$/i.test(f.name || '') ||
+                (f.name || '').toLowerCase().endsWith('.docx') ||
+                (f.name || '').toLowerCase().endsWith('.doc') ||
                 f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             )
         );
     } else if (_aiPickerFilter === 'ocr') {
         // OCR works on images and PDFs
         files = files.filter(f =>
-            (f.type||'').startsWith('image/') ||
-            /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name||'') ||
+            (f.type || '').startsWith('image/') ||
+            /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name || '') ||
             f.type === 'application/pdf' ||
-            (f.name||'').toLowerCase().endsWith('.pdf')
+            (f.name || '').toLowerCase().endsWith('.pdf')
         );
     }
 
     // Category tab filter
     if (_aiPickerCategory === 'image') {
-        files = files.filter(f => (f.type||'').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(f.name||''));
+        files = files.filter(f => (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(f.name || ''));
     } else if (_aiPickerCategory === 'pdf') {
-        files = files.filter(f => f.type === 'application/pdf' || (f.name||'').toLowerCase().endsWith('.pdf'));
+        files = files.filter(f => f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
     } else if (_aiPickerCategory === 'docx') {
-        files = files.filter(f => (f.name||'').toLowerCase().endsWith('.docx') || (f.name||'').toLowerCase().endsWith('.doc'));
+        files = files.filter(f => (f.name || '').toLowerCase().endsWith('.docx') || (f.name || '').toLowerCase().endsWith('.doc'));
     }
 
     if (query) {
         const q = query.toLowerCase();
-        files = files.filter(f => (f.name||'').toLowerCase().includes(q));
+        files = files.filter(f => (f.name || '').toLowerCase().includes(q));
     }
 
     const countEl = document.getElementById('aiPickerCount');
@@ -3151,7 +3151,7 @@ function renderAIFilePicker(query) {
     }
 
     list.className = 'ai-picker-grid';
-    list.innerHTML = files.map(function(f, idx) {
+    list.innerHTML = files.map(function (f, idx) {
         const ic = aiFileIcon(f.type, f.name);
         const isImg = (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name || '');
         const ext = ((f.name || '').split('.').pop() || 'file').slice(0, 4);
@@ -3159,23 +3159,23 @@ function renderAIFilePicker(query) {
         let previewHtml;
         if (isImg) {
             previewHtml = `<img src="/thumbs/${f.id}.webp" onerror="this.onerror=null;this.src='/api/files/preview/${f.id}?thumb=1'" alt="${escapeHtml(f.name || '')}" loading="lazy" decoding="async">`
-                        + `<div class="ai-picker-card-icon-wrap" style="display:none;"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
+                + `<div class="ai-picker-card-icon-wrap" style="display:none;"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
         } else {
             previewHtml = `<div class="ai-picker-card-icon-wrap"><i class="fas ${ic.icon}" style="color:${ic.color};"></i><span class="ai-picker-card-ext">${ext.toUpperCase()}</span></div>`;
         }
 
         return '<div class="ai-picker-card" data-idx="' + idx + '" title="' + escapeHtml(f.name || '') + '">'
-             + '<div class="ai-picker-card-preview">' + previewHtml + '<div class="ai-picker-card-check"><i class="fas fa-check"></i></div></div>'
-             + '<div class="ai-picker-card-info">'
-             + '<div class="ai-picker-card-title">' + escapeHtml(f.name || 'Unknown') + '</div>'
-             + '<div class="ai-picker-card-size">' + aiFormatBytes(f.size) + '</div>'
-             + '</div>'
-             + '</div>';
+            + '<div class="ai-picker-card-preview">' + previewHtml + '<div class="ai-picker-card-check"><i class="fas fa-check"></i></div></div>'
+            + '<div class="ai-picker-card-info">'
+            + '<div class="ai-picker-card-title">' + escapeHtml(f.name || 'Unknown') + '</div>'
+            + '<div class="ai-picker-card-size">' + aiFormatBytes(f.size) + '</div>'
+            + '</div>'
+            + '</div>';
     }).join('');
 
     // Attach click handlers cleanly to avoid any syntax errors with quotes in filenames
-    list.querySelectorAll('.ai-picker-card').forEach(function(item) {
-        item.addEventListener('click', function() {
+    list.querySelectorAll('.ai-picker-card').forEach(function (item) {
+        item.addEventListener('click', function () {
             const idx = parseInt(this.getAttribute('data-idx'), 10);
             const chosen = files[idx];
             if (chosen) {
@@ -3250,16 +3250,16 @@ function clearConvertFile() {
 }
 
 async function doConvert() {
-    const fileId   = document.getElementById('convertFileId').value;
+    const fileId = document.getElementById('convertFileId').value;
     const folderId = document.getElementById('convertTargetFolder').value;
-    if (!fileId) { aiShowResult('convertResult','error','<i class="fas fa-exclamation-circle"></i> Please select a file first.'); return; }
+    if (!fileId) { aiShowResult('convertResult', 'error', '<i class="fas fa-exclamation-circle"></i> Please select a file first.'); return; }
     const selName = (document.getElementById('convertSelectedName').textContent || '').toLowerCase();
     if (selName.endsWith('.pdf')) {
         aiShowResult('convertResult', 'error', '<i class="fas fa-exclamation-circle"></i> This file is already a PDF! Please select an image or Word (DOCX) document.');
         return;
     }
     aiSetBtnLoading('convertBtn', true);
-    aiShowResult('convertResult','loading','<i class="fas fa-circle-notch fa-spin"></i> Converting… this may take a few seconds.');
+    aiShowResult('convertResult', 'loading', '<i class="fas fa-circle-notch fa-spin"></i> Converting… this may take a few seconds.');
     try {
         const resp = await fetch('/api/ai/convert', {
             method: 'POST', credentials: 'include',
@@ -3268,14 +3268,14 @@ async function doConvert() {
         });
         const data = await resp.json();
         if (data.success) {
-            aiShowResult('convertResult','success','<i class="fas fa-check-circle"></i> ' + data.message);
-            pdToast('success','Conversion Complete', data.message);
+            aiShowResult('convertResult', 'success', '<i class="fas fa-check-circle"></i> ' + data.message);
+            pdToast('success', 'Conversion Complete', data.message);
             if (typeof loadFiles === 'function') await loadFiles();
         } else {
-            aiShowResult('convertResult','error','<i class="fas fa-times-circle"></i> ' + (data.error || 'Conversion failed.'));
+            aiShowResult('convertResult', 'error', '<i class="fas fa-times-circle"></i> ' + (data.error || 'Conversion failed.'));
         }
-    } catch(e) {
-        aiShowResult('convertResult','error','<i class="fas fa-times-circle"></i> Network error. Please try again.');
+    } catch (e) {
+        aiShowResult('convertResult', 'error', '<i class="fas fa-times-circle"></i> Network error. Please try again.');
     }
     aiSetBtnLoading('convertBtn', false, 'Convert to PDF', 'magic');
 }
@@ -3313,9 +3313,9 @@ function clearOCRFile() {
 
 async function doOCR() {
     const fileId = document.getElementById('ocrFileId').value;
-    if (!fileId) { aiShowResult('ocrResultMsg','error','<i class="fas fa-exclamation-circle"></i> Please select a file.'); return; }
+    if (!fileId) { aiShowResult('ocrResultMsg', 'error', '<i class="fas fa-exclamation-circle"></i> Please select a file.'); return; }
     aiSetBtnLoading('ocrBtn', true);
-    aiShowResult('ocrResultMsg','loading','<i class="fas fa-circle-notch fa-spin"></i> Extracting text… this may take 15-30 seconds for images.');
+    aiShowResult('ocrResultMsg', 'loading', '<i class="fas fa-circle-notch fa-spin"></i> Extracting text… this may take 15-30 seconds for images.');
     document.getElementById('ocrTextResult').style.display = 'none';
     try {
         const resp = await fetch('/api/ai/ocr', {
@@ -3325,20 +3325,20 @@ async function doOCR() {
         });
         const data = await resp.json();
         if (!resp.ok || data.error) {
-            aiShowResult('ocrResultMsg','error','<i class="fas fa-times-circle"></i> ' + (data.error || 'OCR failed.'));
+            aiShowResult('ocrResultMsg', 'error', '<i class="fas fa-times-circle"></i> ' + (data.error || 'OCR failed.'));
         } else if (!data.text) {
-            aiShowResult('ocrResultMsg','info','<i class="fas fa-info-circle"></i> No text found in this file.');
+            aiShowResult('ocrResultMsg', 'info', '<i class="fas fa-info-circle"></i> No text found in this file.');
         } else {
             _ocrCurrentFileId = fileId;
             _ocrExtractedText = data.text;
             document.getElementById('ocrTextArea').value = data.text;
-            document.getElementById('ocrWordCount').textContent = '— ' + (data.wordCount||0) + ' words, ' + (data.charCount||0) + ' chars';
+            document.getElementById('ocrWordCount').textContent = '— ' + (data.wordCount || 0) + ' words, ' + (data.charCount || 0) + ' chars';
             document.getElementById('ocrTextResult').style.display = 'block';
-            aiShowResult('ocrResultMsg','success','<i class="fas fa-check-circle"></i> Text extracted successfully.');
-            pdToast('success','OCR Complete','Extracted ' + (data.wordCount||0) + ' words from the file.');
+            aiShowResult('ocrResultMsg', 'success', '<i class="fas fa-check-circle"></i> Text extracted successfully.');
+            pdToast('success', 'OCR Complete', 'Extracted ' + (data.wordCount || 0) + ' words from the file.');
         }
-    } catch(e) {
-        aiShowResult('ocrResultMsg','error','<i class="fas fa-times-circle"></i> Network error. Please try again.');
+    } catch (e) {
+        aiShowResult('ocrResultMsg', 'error', '<i class="fas fa-times-circle"></i> Network error. Please try again.');
     }
     aiSetBtnLoading('ocrBtn', false, 'Extract Text', 'font');
 }
@@ -3346,7 +3346,7 @@ async function doOCR() {
 function copyOCRText() {
     const text = document.getElementById('ocrTextArea').value;
     if (!text) return;
-    navigator.clipboard.writeText(text).then(function() { pdToast('success','Copied','OCR text copied to clipboard.'); });
+    navigator.clipboard.writeText(text).then(function () { pdToast('success', 'Copied', 'OCR text copied to clipboard.'); });
 }
 
 async function saveOCRText() {
@@ -3362,13 +3362,13 @@ async function saveOCRText() {
         });
         const data = await resp.json();
         if (data.success && data.savedFile) {
-            pdToast('success','Saved','"' + data.savedFile.name + '" saved to Drive.');
-            aiShowResult('ocrResultMsg','success','<i class="fas fa-save"></i> Saved as "' + data.savedFile.name + '" in your Drive.');
+            pdToast('success', 'Saved', '"' + data.savedFile.name + '" saved to Drive.');
+            aiShowResult('ocrResultMsg', 'success', '<i class="fas fa-save"></i> Saved as "' + data.savedFile.name + '" in your Drive.');
             if (typeof loadFiles === 'function') await loadFiles();
         } else {
-            pdToast('error','Error', data.error || 'Failed to save.');
+            pdToast('error', 'Error', data.error || 'Failed to save.');
         }
-    } catch(e) { pdToast('error','Error','Network error.'); }
+    } catch (e) { pdToast('error', 'Error', 'Network error.'); }
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-save"></i> Save as .txt to Drive';
 }
@@ -3406,9 +3406,9 @@ function clearSummaryFile() {
 
 async function doSummarize() {
     const fileId = document.getElementById('summaryFileId').value;
-    if (!fileId) { aiShowResult('summaryResultMsg','error','<i class="fas fa-exclamation-circle"></i> Please select a PDF or DOCX file.'); return; }
+    if (!fileId) { aiShowResult('summaryResultMsg', 'error', '<i class="fas fa-exclamation-circle"></i> Please select a PDF or DOCX file.'); return; }
     aiSetBtnLoading('summaryBtn', true);
-    aiShowResult('summaryResultMsg','loading','<i class="fas fa-circle-notch fa-spin"></i> Reading document and generating AI summary…');
+    aiShowResult('summaryResultMsg', 'loading', '<i class="fas fa-circle-notch fa-spin"></i> Reading document and generating AI summary…');
     document.getElementById('summaryTextResult').style.display = 'none';
     try {
         const resp = await fetch('/api/ai/summarize', {
@@ -3418,27 +3418,27 @@ async function doSummarize() {
         });
         const data = await resp.json();
         if (!resp.ok || data.error) {
-            aiShowResult('summaryResultMsg','error','<i class="fas fa-times-circle"></i> ' + (data.error || 'Summarization failed.'));
+            aiShowResult('summaryResultMsg', 'error', '<i class="fas fa-times-circle"></i> ' + (data.error || 'Summarization failed.'));
         } else {
             _summaryCurrentFileId = fileId;
             _summaryText = data.summary;
-            const rendered = (data.summary||'')
+            const rendered = (data.summary || '')
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\n/g, '<br>');
             document.getElementById('summaryTextArea').innerHTML = rendered;
             document.getElementById('summaryTextResult').style.display = 'block';
-            aiShowResult('summaryResultMsg','success','<i class="fas fa-check-circle"></i> Summary generated successfully.');
-            pdToast('success','Summary Ready','AI summary has been generated.');
+            aiShowResult('summaryResultMsg', 'success', '<i class="fas fa-check-circle"></i> Summary generated successfully.');
+            pdToast('success', 'Summary Ready', 'AI summary has been generated.');
         }
-    } catch(e) {
-        aiShowResult('summaryResultMsg','error','<i class="fas fa-times-circle"></i> Network error. Please try again.');
+    } catch (e) {
+        aiShowResult('summaryResultMsg', 'error', '<i class="fas fa-times-circle"></i> Network error. Please try again.');
     }
     aiSetBtnLoading('summaryBtn', false, 'Summarize Document', 'align-left');
 }
 
 function copySummaryText() {
     if (!_summaryText) return;
-    navigator.clipboard.writeText(_summaryText).then(function() { pdToast('success','Copied','Summary copied to clipboard.'); });
+    navigator.clipboard.writeText(_summaryText).then(function () { pdToast('success', 'Copied', 'Summary copied to clipboard.'); });
 }
 
 async function saveSummaryText() {
@@ -3454,13 +3454,13 @@ async function saveSummaryText() {
         });
         const data = await resp.json();
         if (data.success && data.savedFile) {
-            pdToast('success','Saved','"' + data.savedFile.name + '" saved to Drive.');
-            aiShowResult('summaryResultMsg','success','<i class="fas fa-save"></i> Summary saved as "' + data.savedFile.name + '" in your Drive.');
+            pdToast('success', 'Saved', '"' + data.savedFile.name + '" saved to Drive.');
+            aiShowResult('summaryResultMsg', 'success', '<i class="fas fa-save"></i> Summary saved as "' + data.savedFile.name + '" in your Drive.');
             if (typeof loadFiles === 'function') await loadFiles();
         } else {
-            pdToast('error','Error', data.error || 'Failed to save.');
+            pdToast('error', 'Error', data.error || 'Failed to save.');
         }
-    } catch(e) { pdToast('error','Error','Network error.'); }
+    } catch (e) { pdToast('error', 'Error', 'Network error.'); }
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-save"></i> Save as .txt to Drive';
 }
