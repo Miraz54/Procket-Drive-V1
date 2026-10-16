@@ -366,7 +366,7 @@ async function loadStorageStats() {
 }
 
 function updateStorageUI(usedBytes, count, totalBytes) {
-    totalBytes = totalBytes || (1 * 1024 * 1024 * 1024); // 1 GB (Supabase free limit)
+    totalBytes = totalBytes || (15 * 1024 * 1024 * 1024); // 15 GB user quota
     usedBytes = Number(usedBytes) || 0;
     count = Number(count) || 0;
     const pct = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
@@ -444,11 +444,11 @@ async function uploadFile(input) {
         return;
     }
 
-    // Check if upload exceeds total storage capacity (1 GB)
+    // Check if upload exceeds total storage capacity (15 GB)
     const currentUsed = Array.isArray(allFiles) ? allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) : 0;
-    const maxTotalStorage = 1 * 1024 * 1024 * 1024; // 1 GB
+    const maxTotalStorage = 15 * 1024 * 1024 * 1024; // 15 GB
     if (currentUsed + file.size > maxTotalStorage) {
-        showToast(`⚠️ Storage full! This upload would exceed your 1GB storage limit (${formatFileSize(currentUsed)} / 1GB used).`, 'error', 6000);
+        showToast(`⚠️ Storage full! This upload would exceed your 15GB storage limit (${formatFileSize(currentUsed)} / 15GB used).`, 'error', 6000);
         input.value = '';
         return;
     }

@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
 
         const filesList  = data || [];
         const usedBytes  = filesList.reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
-        const totalBytes = TOTAL_STORAGE_LIMIT_BYTES || (1 * 1024 * 1024 * 1024); // 1 GB (Supabase free limit)
+        const totalBytes = TOTAL_STORAGE_LIMIT_BYTES || (15 * 1024 * 1024 * 1024); // 15 GB user quota
 
         res.json({ used: usedBytes, total: totalBytes, count: filesList.length });
     } catch (err) {
