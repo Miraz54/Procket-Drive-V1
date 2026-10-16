@@ -68,7 +68,7 @@ router.get('/list', requireAuth, async (req, res) => {
         let query = supabaseAdmin.from('folders')
             .select('id, name, is_shared, shared_emails, created_at, parent_id')
             .eq('user_id', req.session.userId)
-            .order('created_at', { ascending: true });
+            .order('name', { ascending: true });
 
         if (parent_id) {
             query = query.eq('parent_id', parent_id);
@@ -233,7 +233,7 @@ router.get('/public/:token', async (req, res) => {
             .select('id, original_name, file_size, mime_type, uploaded_at, file_path')
             .eq('folder_id', folder.id)
             .eq('is_deleted', 0)
-            .order('uploaded_at', { ascending: false });
+            .order('original_name', { ascending: true });
 
         res.json({
             folder: { id: folder.id, name: folder.name, created_at: folder.created_at },

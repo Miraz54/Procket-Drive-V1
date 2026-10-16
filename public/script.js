@@ -888,8 +888,13 @@ function updateDropzoneLabel() {
 }
 
 function renderDriveView(folders, files) {
-    folders = folders !== undefined ? folders : allFolders;
-    files = files !== undefined ? files : allFiles;
+    folders = folders !== undefined ? [...folders] : [...allFolders];
+    files = files !== undefined ? [...files] : [...allFiles];
+
+    // Alphabetical sort (A to Z) - case-insensitive natural comparison
+    folders.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
+    files.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
+
     renderBreadcrumbs();
     updateDropzoneLabel();
     const container = document.getElementById('fileList');
@@ -1361,6 +1366,9 @@ async function showSharedWithMeView() {
             }
             return;
         }
+
+        // Sort shared folders alphabetically (A to Z)
+        sharedFolders.sort((a, b) => (a.name || a.folder_name || '').localeCompare(b.name || b.folder_name || '', undefined, { numeric: true, sensitivity: 'base' }));
 
         if (container) {
             container.innerHTML = sharedFolders.map(sf => {
@@ -2482,9 +2490,12 @@ async function showSharedFolderLoggedIn(token, userData) {
         if (!data.files || data.files.length === 0) {
             container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-2);grid-column:1/-1;"><i class="fas fa-folder-open fa-2x" style="opacity:0.4;"></i><p style="margin-top:12px;">This shared folder is empty.</p></div>';
         } else {
+            // Sort shared folder files alphabetically (A to Z)
+            const sortedSharedFiles = [...data.files].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
+
             if (currentView === 'grid') {
                 container.className = "file-container grid-view";
-                container.innerHTML = data.files.map(f => `
+                container.innerHTML = sortedSharedFiles.map(f => `
                     <div class="file-card">
                         <div class="file-icon">${getFileIcon(f.type, f.id, f.name)}</div>
                         <div class="file-name" title="${escapeHtml(f.name)}">${truncateName(f.name, 22)}</div>
@@ -2499,7 +2510,7 @@ async function showSharedFolderLoggedIn(token, userData) {
                     </div>`).join('');
             } else {
                 container.className = "file-container list-view";
-                container.innerHTML = data.files.map(f => `
+                container.innerHTML = sortedSharedFiles.map(f => `
                     <div class="file-list-item">
                         <div class="file-list-info" style="flex:1;">
                             <div class="file-list-icon">${getFileIcon(f.type, f.id, f.name)}</div>

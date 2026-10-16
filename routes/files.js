@@ -554,7 +554,7 @@ router.get('/list', requireAuth, async (req, res) => {
     let query = supabaseAdmin.from('files')
         .select('id, original_name, file_size, mime_type, uploaded_at, folder_id')
         .or('is_deleted.eq.0,is_deleted.is.null')
-        .order('uploaded_at', { ascending: false });
+        .order('original_name', { ascending: true });
 
     if (all === 'true') {
         query = query.eq('user_id', req.session.userId);

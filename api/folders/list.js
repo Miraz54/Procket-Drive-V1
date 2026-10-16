@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
         let query = supabase.from('folders')
             .select('*')
             .eq('user_id', userId)
-            .order('created_at', { ascending: true });
+            .order('name', { ascending: true });
 
         if (parent_id) {
             query = query.eq('parent_id', parent_id);

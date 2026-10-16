@@ -83,7 +83,7 @@ module.exports = async function handler(req, res) {
 
         let query = supabase.from('files').select('*')
             .eq('is_deleted', 0)
-            .order('uploaded_at', { ascending: false });
+            .order('original_name', { ascending: true });
 
         if (folder_id) {
             // Verify folder access
