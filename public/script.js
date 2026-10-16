@@ -312,6 +312,10 @@ function switchView(view) {
         if (overlay) overlay.style.display = 'none';
     }
 
+    if (view !== 'vault' && _vaultUnlocked) {
+        lockVault(false);
+    }
+
     if (view === 'drive') {
         document.getElementById('navMyDrive')?.classList.add('active');
         if (titleEl) titleEl.textContent = currentFolderId ? (folderStack[folderStack.length - 1]?.name || 'My Drive') : 'My Drive';
@@ -335,6 +339,16 @@ function switchView(view) {
         showSharedWithMeView();
         if (window.location.pathname !== '/shared-with-me') {
             window.history.pushState(null, '', '/shared-with-me');
+        }
+    } else if (view === 'vault') {
+        document.getElementById('navVault')?.classList.add('active');
+        if (titleEl) titleEl.innerHTML = `<i class="fas fa-shield-halved" style="color:#a78bfa;"></i> Private Vault`;
+        const breadcrumbBar = document.getElementById('breadcrumbBar');
+        if (breadcrumbBar) breadcrumbBar.style.display = 'none';
+        if (dropzone) dropzone.style.display = 'none';
+        renderVaultView();
+        if (window.location.pathname !== '/vault') {
+            window.history.pushState(null, '', '/vault');
         }
     }
 }
@@ -891,6 +905,12 @@ function renderDriveView(folders, files) {
     folders = folders !== undefined ? [...folders] : [...allFolders];
     files = files !== undefined ? [...files] : [...allFiles];
 
+    // Exclude vault files from regular drive views
+    const vaultIds = getVaultFileIds();
+    if (activeNav !== 'vault') {
+        files = files.filter(f => !vaultIds.includes(String(f.id)));
+    }
+
     // Alphabetical sort (A to Z) - case-insensitive natural comparison
     folders.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
     files.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
@@ -931,6 +951,7 @@ function renderDriveView(folders, files) {
                 <div class="file-size">Folder</div>
                 <div class="file-actions">
                     <button title="Open Folder" onclick="openFolder('${f.id}')"><i class="fas fa-folder-open"></i></button>
+                    <button title="Download Folder as ZIP" class="zip-download-btn" onclick="downloadFolderAsZip('${f.id}', '${escapeHtml(f.name)}')"><i class="fas fa-file-archive"></i></button>
                     <button title="Share Folder" class="share-btn" onclick="shareFolderModal('${f.id}')"><i class="fas fa-share-alt"></i></button>
                     <button title="Rename" onclick="renameFolderPrompt('${f.id}')"><i class="fas fa-pencil-alt"></i></button>
                     <button title="Delete" class="delete-file-btn" onclick="deleteFolderConfirm('${f.id}')"><i class="fas fa-trash"></i></button>
@@ -947,6 +968,7 @@ function renderDriveView(folders, files) {
                 <button title="Preview"  onclick="previewFile('${f.id}')"><i class="fas fa-eye"></i></button>
                 <button title="Share"    class="share-btn" onclick="shareFile('${f.id}')"><i class="fas fa-share-alt"></i></button>
                 <button title="Download" onclick="downloadFile('${f.id}')"><i class="fas fa-download"></i></button>
+                <button title="Move to Private Vault" onclick="toggleFileVault('${f.id}')"><i class="fas fa-shield-alt"></i></button>
                 <button title="Delete"   class="delete-file-btn" onclick="deleteFile('${f.id}')"><i class="fas fa-trash"></i></button>
             </div>
         </div>`).join('');
@@ -968,6 +990,7 @@ function renderDriveView(folders, files) {
                 </div>
                 <div class="file-list-actions">
                     <button title="Open Folder" onclick="openFolder('${f.id}')"><i class="fas fa-folder-open"></i></button>
+                    <button title="Download Folder as ZIP" class="zip-download-btn" onclick="downloadFolderAsZip('${f.id}', '${escapeHtml(f.name)}')"><i class="fas fa-file-archive"></i></button>
                     <button title="Share Folder" class="share-btn" onclick="shareFolderModal('${f.id}')"><i class="fas fa-share-alt"></i></button>
                     <button title="Rename" onclick="renameFolderPrompt('${f.id}')"><i class="fas fa-pencil-alt"></i></button>
                     <button title="Delete" class="delete-file-btn" onclick="deleteFolderConfirm('${f.id}')"><i class="fas fa-trash"></i></button>
@@ -975,7 +998,7 @@ function renderDriveView(folders, files) {
             </div>`;
         }).join('');
         html += files.map(f => `
-        <div class="file-list-item"><div class="file-list-info"><div class="file-list-icon">${getFileIcon(f.type, f.id, f.name)}</div><div class="file-list-details"><div class="file-list-name">${escapeHtml(f.name)}</div><div class="file-list-meta">${formatFileSize(f.size)} &bull; <i class="fas fa-calendar-alt"></i> ${formatDateTime(f.uploaded_at)}</div></div></div><div class="file-list-actions"><button title="Preview" onclick="previewFile('${f.id}')"><i class="fas fa-eye"></i></button><button title="Share" class="share-btn" onclick="shareFile('${f.id}')"><i class="fas fa-share-alt"></i></button><button title="Download" onclick="downloadFile('${f.id}')"><i class="fas fa-download"></i></button><button title="Delete"   class="delete-file-btn" onclick="deleteFile('${f.id}')"><i class="fas fa-trash"></i></button></div></div>`).join('');
+        <div class="file-list-item"><div class="file-list-info"><div class="file-list-icon">${getFileIcon(f.type, f.id, f.name)}</div><div class="file-list-details"><div class="file-list-name">${escapeHtml(f.name)}</div><div class="file-list-meta">${formatFileSize(f.size)} &bull; <i class="fas fa-calendar-alt"></i> ${formatDateTime(f.uploaded_at)}</div></div></div><div class="file-list-actions"><button title="Preview" onclick="previewFile('${f.id}')"><i class="fas fa-eye"></i></button><button title="Share" class="share-btn" onclick="shareFile('${f.id}')"><i class="fas fa-share-alt"></i></button><button title="Download" onclick="downloadFile('${f.id}')"><i class="fas fa-download"></i></button><button title="Move to Private Vault" onclick="toggleFileVault('${f.id}')"><i class="fas fa-shield-alt"></i></button><button title="Delete"   class="delete-file-btn" onclick="deleteFile('${f.id}')"><i class="fas fa-trash"></i></button></div></div>`).join('');
     }
     container.innerHTML = html;
 }
@@ -992,6 +1015,10 @@ function renderBreadcrumbs() {
             html += `<span class="breadcrumb-item active">${escapeHtml(f.name)}</span>`;
         }
     });
+    if (folderStack.length > 0) {
+        const currentFolder = folderStack[folderStack.length - 1];
+        html += `<button class="btn-primary-sm zip-download-btn" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;font-size:0.8rem;" onclick="downloadFolderAsZip('${currentFolder.id}', '${escapeHtml(currentFolder.name)}')"><i class="fas fa-file-archive"></i> Download as ZIP</button>`;
+    }
     bar.innerHTML = html;
     bar.style.display = folderStack.length > 0 ? 'flex' : 'none';
 }
@@ -1164,6 +1191,563 @@ async function removeSharedFolder(id, token) {
     });
 }
 
+// ============================================================
+//  FEATURE: Download Folder as ZIP
+// ============================================================
+async function downloadFolderAsZip(folderId, folderName) {
+    if (typeof JSZip === 'undefined') {
+        showToast('ZIP library is loading, please try again.', 'warning');
+        return;
+    }
+
+    folderName = folderName || 'Folder';
+    pdToast('info', 'Preparing ZIP... 📦', `Collecting files from "${folderName}"`, 3000);
+
+    try {
+        const res = await fetch(`/api/files/list?folder_id=${folderId}`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Failed to fetch folder files');
+        const files = await res.json();
+
+        if (!Array.isArray(files) || files.length === 0) {
+            pdToast('info', 'Empty Folder', `"${folderName}" has no files to download.`, 3000);
+            return;
+        }
+
+        const zip = new JSZip();
+        let loaded = 0;
+        const total = files.length;
+
+        pdToast('info', 'Downloading Files...', `Processing 0 / ${total} files`, 5000);
+
+        await Promise.all(files.map(async (file) => {
+            try {
+                const dlRes = await fetch(`/api/files/download/${file.id}`, { credentials: 'include' });
+                if (!dlRes.ok) throw new Error(`Download failed`);
+                const blob = await dlRes.blob();
+                zip.file(file.name, blob);
+                loaded++;
+            } catch (err) {
+                console.error(`Failed to add ${file.name} to zip:`, err);
+            }
+        }));
+
+        if (loaded === 0) {
+            showToast('Could not download files from folder.', 'error');
+            return;
+        }
+
+        pdToast('info', 'Compressing...', 'Generating ZIP archive...', 3000);
+        const content = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${folderName}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+        pdToast('success', 'Download Complete! 🎉', `"${folderName}.zip" (${loaded} files) downloaded.`, 4000);
+    } catch (err) {
+        console.error('ZIP error:', err);
+        showToast('Failed to generate ZIP: ' + (err.message || 'Unknown error'), 'error');
+    }
+}
+window.downloadFolderAsZip = downloadFolderAsZip;
+
+async function downloadSharedFolderAsZip(token, folderName) {
+    if (typeof JSZip === 'undefined') {
+        showToast('ZIP library is loading, please try again.', 'warning');
+        return;
+    }
+    folderName = folderName || 'Shared_Folder';
+    pdToast('info', 'Preparing ZIP... 📦', `Collecting files from "${folderName}"`, 3000);
+
+    try {
+        const res = await fetch(`/api/folders/public/${token}`);
+        const data = await res.json();
+        if (!res.ok || !data || !Array.isArray(data.files) || data.files.length === 0) {
+            pdToast('info', 'Empty Folder', 'No files in this shared folder to download.', 3000);
+            return;
+        }
+
+        const zip = new JSZip();
+        let loaded = 0;
+        const total = data.files.length;
+
+        pdToast('info', 'Downloading Files...', `Processing 0 / ${total} files`, 5000);
+
+        await Promise.all(data.files.map(async (file) => {
+            try {
+                const dlRes = await fetch(`/api/files/public/download/${file.id}`);
+                if (!dlRes.ok) throw new Error(`Download failed`);
+                const blob = await dlRes.blob();
+                zip.file(file.name, blob);
+                loaded++;
+            } catch (err) {
+                console.error(`Failed to add ${file.name} to zip:`, err);
+            }
+        }));
+
+        if (loaded === 0) {
+            showToast('Could not download files.', 'error');
+            return;
+        }
+
+        pdToast('info', 'Compressing...', 'Generating ZIP archive...', 3000);
+        const content = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${folderName}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+        pdToast('success', 'Download Complete! 🎉', `"${folderName}.zip" (${loaded} files) downloaded.`, 4000);
+    } catch (err) {
+        console.error('Shared ZIP error:', err);
+        showToast('Failed to generate ZIP: ' + (err.message || 'Unknown error'), 'error');
+    }
+}
+window.downloadSharedFolderAsZip = downloadSharedFolderAsZip;
+
+// ============================================================
+//  FEATURE: Secure Private Vault (PIN Lock & Secret Safe)
+// ============================================================
+let _vaultUnlocked = false;
+let _vaultPinDigits = '';
+let _vaultSetupStep = 1;
+let _vaultTempFirstPin = '';
+let _vaultCountdownSeconds = 120;
+let _vaultAutoLockInterval = null;
+
+function getCurrentUserEmail() {
+    return (document.getElementById('userEmail')?.textContent || '').trim().toLowerCase();
+}
+
+function getVaultFileIds() {
+    try {
+        const email = getCurrentUserEmail() || 'default';
+        const key = `pd_vault_files_${email}`;
+        const saved = JSON.parse(localStorage.getItem(key) || '[]');
+        return Array.isArray(saved) ? saved.map(String) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveVaultFileIds(ids) {
+    try {
+        const email = getCurrentUserEmail() || 'default';
+        const key = `pd_vault_files_${email}`;
+        localStorage.setItem(key, JSON.stringify(ids.map(String)));
+    } catch (e) {}
+}
+
+function hashPin(pin) {
+    let hash = 0;
+    for (let i = 0; i < pin.length; i++) {
+        const char = pin.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0;
+    }
+    return 'v_pin_' + Math.abs(hash) + '_' + pin.length;
+}
+
+function getVaultPinHash() {
+    const email = getCurrentUserEmail() || 'default';
+    return localStorage.getItem(`pd_vault_pin_${email}`);
+}
+
+function isVaultPinSet() {
+    return !!getVaultPinHash();
+}
+
+function setVaultPin(pin) {
+    const email = getCurrentUserEmail() || 'default';
+    localStorage.setItem(`pd_vault_pin_${email}`, hashPin(pin));
+}
+
+function verifyVaultPin(pin) {
+    const stored = getVaultPinHash();
+    return stored && stored === hashPin(pin);
+}
+
+function startVaultAutoLock() {
+    clearInterval(_vaultAutoLockInterval);
+    _vaultCountdownSeconds = 120; // 2 minutes
+    updateVaultCountdownUI();
+    _vaultAutoLockInterval = setInterval(() => {
+        _vaultCountdownSeconds--;
+        updateVaultCountdownUI();
+        if (_vaultCountdownSeconds <= 0) {
+            lockVault(true);
+        }
+    }, 1000);
+}
+
+function updateVaultCountdownUI() {
+    const badge = document.getElementById('vaultCountdownBadge');
+    if (!badge) return;
+    const m = Math.floor(_vaultCountdownSeconds / 60);
+    const s = _vaultCountdownSeconds % 60;
+    badge.innerHTML = `<i class="fas fa-hourglass-half"></i> Auto-locks in ${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function lockVault(auto = false) {
+    _vaultUnlocked = false;
+    _vaultPinDigits = '';
+    clearInterval(_vaultAutoLockInterval);
+    const navBadge = document.getElementById('vaultNavLockBadge');
+    if (navBadge) navBadge.innerHTML = '<i class="fas fa-lock"></i>';
+    if (activeNav === 'vault') {
+        renderVaultView();
+    }
+    pdToast(auto ? 'warning' : 'info', '🔒 Vault Locked', auto ? 'Vault was locked after 2 minutes of inactivity.' : 'Private Vault is now locked.', 3000);
+}
+window.lockVault = lockVault;
+
+function openVaultView() {
+    switchView('vault');
+}
+window.openVaultView = openVaultView;
+
+function toggleFileVault(fileId) {
+    const file = allFiles.find(f => String(f.id) === String(fileId));
+    const fileName = file ? file.name : 'File';
+    let vaultIds = getVaultFileIds();
+    const strId = String(fileId);
+
+    if (vaultIds.includes(strId)) {
+        // Remove from vault -> restored to drive
+        vaultIds = vaultIds.filter(id => id !== strId);
+        saveVaultFileIds(vaultIds);
+        pdToast('success', 'Restored to Drive! 📂', `"${fileName}" is now back in My Drive.`, 3000);
+    } else {
+        // Move into vault
+        if (!isVaultPinSet()) {
+            pdToast('info', 'Setup Vault First', 'Please set up your Private Vault PIN first.', 3000);
+            openVaultView();
+            return;
+        }
+        vaultIds.push(strId);
+        saveVaultFileIds(vaultIds);
+        pdToast('success', 'Moved to Vault! 🔒', `"${fileName}" is now hidden from Drive and secured in your Vault.`, 3000);
+    }
+
+    if (activeNav === 'vault') {
+        renderVaultView();
+    } else {
+        renderDriveView();
+    }
+}
+window.toggleFileVault = toggleFileVault;
+
+function renderVaultView() {
+    const container = document.getElementById('fileList');
+    if (!container) return;
+    container.className = "file-container";
+
+    if (!isVaultPinSet()) {
+        renderVaultSetupUI(container);
+        return;
+    }
+
+    if (!_vaultUnlocked) {
+        renderVaultUnlockUI(container);
+        return;
+    }
+
+    renderVaultFilesUI(container);
+}
+
+function renderVaultSetupUI(container) {
+    const stepTitle = _vaultSetupStep === 1 ? 'Setup Private Vault' : 'Confirm Your PIN';
+    const stepSub = _vaultSetupStep === 1 
+        ? 'Create a 4-digit PIN to secure and hide confidential files.' 
+        : 'Re-enter your 4-digit PIN to confirm setup.';
+
+    container.innerHTML = `
+        <div class="vault-container">
+            <div class="vault-shield-icon-wrap">
+                <i class="fas fa-shield-halved"></i>
+            </div>
+            <h2 style="font-size:1.35rem;font-weight:700;margin-bottom:6px;color:var(--text-1);">${stepTitle}</h2>
+            <p style="color:var(--text-2);font-size:0.9rem;margin:0 auto 20px;max-width:380px;">${stepSub}</p>
+            
+            <div class="vault-pin-dots" id="vaultPinDots">
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 1 ? 'filled' : '' }"></div>
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 2 ? 'filled' : '' }"></div>
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 3 ? 'filled' : '' }"></div>
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 4 ? 'filled' : '' }"></div>
+            </div>
+
+            <div id="vaultSetupError" style="color:#ef4444;font-size:0.85rem;min-height:20px;margin-bottom:12px;"></div>
+
+            <div class="vault-keypad">
+                ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="vault-key" onclick="vaultKeypadInput('${n}')">${n}</button>`).join('')}
+                <button class="vault-key vault-key-action" onclick="vaultKeypadClear()">Clear</button>
+                <button class="vault-key" onclick="vaultKeypadInput('0')">0</button>
+                <button class="vault-key vault-key-action" onclick="vaultKeypadBackspace()"><i class="fas fa-backspace"></i></button>
+            </div>
+            <p style="font-size:0.78rem;color:var(--text-3);margin-top:14px;">
+                <i class="fas fa-lock"></i> Protected by Client-Side Vault Encryption
+            </p>
+        </div>
+    `;
+    attachVaultKeyboardListener();
+}
+
+function renderVaultUnlockUI(container) {
+    container.innerHTML = `
+        <div class="vault-container">
+            <div class="vault-shield-icon-wrap">
+                <i class="fas fa-lock"></i>
+            </div>
+            <h2 style="font-size:1.35rem;font-weight:700;margin-bottom:6px;color:var(--text-1);">Private Vault Locked</h2>
+            <p style="color:var(--text-2);font-size:0.9rem;margin:0 auto 20px;max-width:380px;">Enter your 4-digit PIN to access private files.</p>
+            
+            <div class="vault-pin-dots" id="vaultPinDots">
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 1 ? 'filled' : '' }"></div>
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 2 ? 'filled' : '' }"></div>
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 3 ? 'filled' : '' }"></div>
+                <div class="vault-pin-dot ${ _vaultPinDigits.length >= 4 ? 'filled' : '' }"></div>
+            </div>
+
+            <div id="vaultUnlockError" style="color:#ef4444;font-size:0.85rem;min-height:20px;margin-bottom:12px;"></div>
+
+            <div class="vault-keypad">
+                ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="vault-key" onclick="vaultKeypadInput('${n}')">${n}</button>`).join('')}
+                <button class="vault-key vault-key-action" onclick="vaultKeypadClear()">Clear</button>
+                <button class="vault-key" onclick="vaultKeypadInput('0')">0</button>
+                <button class="vault-key vault-key-action" onclick="vaultKeypadBackspace()"><i class="fas fa-backspace"></i></button>
+            </div>
+
+            <div style="margin-top:16px;">
+                <button class="btn-secondary-action" style="font-size:0.8rem;padding:6px 14px;" onclick="resetVaultPinPrompt()">
+                    <i class="fas fa-key"></i> Forgot / Reset PIN
+                </button>
+            </div>
+        </div>
+    `;
+    attachVaultKeyboardListener();
+}
+
+function vaultKeypadInput(digit) {
+    if (_vaultPinDigits.length >= 4) return;
+    _vaultPinDigits += digit;
+    updateVaultPinDotsUI();
+
+    if (_vaultPinDigits.length === 4) {
+        setTimeout(processVaultPinSubmission, 150);
+    }
+}
+window.vaultKeypadInput = vaultKeypadInput;
+
+function vaultKeypadBackspace() {
+    if (_vaultPinDigits.length > 0) {
+        _vaultPinDigits = _vaultPinDigits.slice(0, -1);
+        updateVaultPinDotsUI();
+    }
+}
+window.vaultKeypadBackspace = vaultKeypadBackspace;
+
+function vaultKeypadClear() {
+    _vaultPinDigits = '';
+    updateVaultPinDotsUI();
+}
+window.vaultKeypadClear = vaultKeypadClear;
+
+function updateVaultPinDotsUI() {
+    const dots = document.querySelectorAll('.vault-pin-dot');
+    dots.forEach((dot, idx) => {
+        if (idx < _vaultPinDigits.length) {
+            dot.classList.add('filled');
+        } else {
+            dot.classList.remove('filled');
+        }
+    });
+}
+
+function attachVaultKeyboardListener() {
+    if (window._vaultKeyListenerAttached) return;
+    window._vaultKeyListenerAttached = true;
+    window.addEventListener('keydown', (e) => {
+        if (activeNav !== 'vault' || _vaultUnlocked) return;
+        if (/^[0-9]$/.test(e.key)) {
+            vaultKeypadInput(e.key);
+        } else if (e.key === 'Backspace') {
+            vaultKeypadBackspace();
+        } else if (e.key === 'Escape') {
+            vaultKeypadClear();
+        }
+    });
+}
+
+function processVaultPinSubmission() {
+    if (!isVaultPinSet()) {
+        if (_vaultSetupStep === 1) {
+            _vaultTempFirstPin = _vaultPinDigits;
+            _vaultPinDigits = '';
+            _vaultSetupStep = 2;
+            renderVaultView();
+        } else {
+            if (_vaultPinDigits === _vaultTempFirstPin) {
+                setVaultPin(_vaultPinDigits);
+                _vaultUnlocked = true;
+                _vaultPinDigits = '';
+                _vaultSetupStep = 1;
+                _vaultTempFirstPin = '';
+                startVaultAutoLock();
+                const navBadge = document.getElementById('vaultNavLockBadge');
+                if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
+                pdToast('success', 'Vault Setup Complete! 🛡️', 'Your Private Vault PIN is now active and unlocked.', 4000);
+                renderVaultView();
+            } else {
+                const err = document.getElementById('vaultSetupError');
+                if (err) err.textContent = '❌ PINs do not match. Starting over.';
+                _vaultPinDigits = '';
+                _vaultSetupStep = 1;
+                _vaultTempFirstPin = '';
+                setTimeout(renderVaultView, 1200);
+            }
+        }
+    } else {
+        if (verifyVaultPin(_vaultPinDigits)) {
+            _vaultUnlocked = true;
+            _vaultPinDigits = '';
+            startVaultAutoLock();
+            const navBadge = document.getElementById('vaultNavLockBadge');
+            if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
+            pdToast('success', 'Access Granted! 🔓', 'Private Vault unlocked.', 2500);
+            renderVaultView();
+        } else {
+            const err = document.getElementById('vaultUnlockError');
+            if (err) err.textContent = '❌ Incorrect PIN. Please try again.';
+            _vaultPinDigits = '';
+            const dots = document.querySelectorAll('.vault-pin-dot');
+            dots.forEach(d => {
+                d.style.borderColor = '#ef4444';
+                d.classList.remove('filled');
+            });
+            setTimeout(() => {
+                dots.forEach(d => d.style.borderColor = '');
+            }, 600);
+        }
+    }
+}
+
+function renderVaultFilesUI(container) {
+    const vaultIds = getVaultFileIds();
+    const vaultFiles = allFiles.filter(f => vaultIds.includes(String(f.id)));
+
+    let html = `
+        <div style="margin-bottom:20px;padding:16px 20px;background:linear-gradient(135deg,rgba(139,92,246,0.12),rgba(99,102,241,0.06));border:1px solid rgba(139,92,246,0.3);border-radius:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:42px;height:42px;border-radius:12px;background:#8b5cf6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+                    <i class="fas fa-shield-halved"></i>
+                </div>
+                <div>
+                    <h3 style="margin:0;font-size:1.1rem;color:var(--text-1);">Private Vault (Unlocked)</h3>
+                    <p style="margin:2px 0 0;font-size:0.8rem;color:var(--text-2);">${vaultFiles.length} private file(s) protected &amp; hidden from Drive</p>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="vault-autolock-badge" id="vaultCountdownBadge" style="margin:0;"><i class="fas fa-hourglass-half"></i> Auto-locks in 2:00</span>
+                <button class="btn-secondary-action" style="padding:7px 14px;font-size:0.85rem;" onclick="lockVault()">
+                    <i class="fas fa-lock"></i> Lock Vault
+                </button>
+            </div>
+        </div>
+    `;
+
+    if (vaultFiles.length === 0) {
+        html += `
+            <div class="empty-state" style="padding:60px 20px;">
+                <div class="empty-state-icon" style="color:#a78bfa;"><i class="fas fa-shield-halved"></i></div>
+                <p>Your Private Vault is Empty</p>
+                <small>Go to My Drive and click the shield icon <i class="fas fa-shield-alt"></i> on any file to hide and protect it here.</small>
+                <div style="margin-top:16px;">
+                    <button class="btn-primary" onclick="switchView('drive')" style="display:inline-flex;align-items:center;gap:8px;">
+                        <i class="fas fa-folder-open"></i> Go to My Drive
+                    </button>
+                </div>
+            </div>
+        `;
+        container.innerHTML = html;
+        return;
+    }
+
+    if (currentView === 'grid') {
+        container.className = "file-container grid-view";
+        html += vaultFiles.map(f => `
+            <div class="file-card" style="border-color:rgba(139,92,246,0.3);background:linear-gradient(180deg,var(--bg-card),rgba(139,92,246,0.03));">
+                <div class="file-icon">${getFileIcon(f.type, f.id, f.name)}</div>
+                <div class="file-name" title="${escapeHtml(f.name)}">${truncateName(f.name, 22)}</div>
+                <div class="file-size">${formatFileSize(f.size)} &bull; <span style="color:#a78bfa;font-weight:600;"><i class="fas fa-shield-alt"></i> Secured</span></div>
+                <div class="file-date"><i class="fas fa-calendar-alt"></i> ${formatDateTime(f.uploaded_at)}</div>
+                <div class="file-actions">
+                    <button title="Preview" onclick="previewFile('${f.id}')"><i class="fas fa-eye"></i></button>
+                    <button title="Download" onclick="downloadFile('${f.id}')"><i class="fas fa-download"></i></button>
+                    <button title="Restore back to My Drive" onclick="toggleFileVault('${f.id}')" style="color:#10b981;"><i class="fas fa-box-open"></i></button>
+                    <button title="Delete permanently" class="delete-file-btn" onclick="deleteFile('${f.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        container.className = "file-container list-view";
+        html += vaultFiles.map(f => `
+            <div class="file-list-item" style="border-left:3px solid #8b5cf6;">
+                <div class="file-list-info" style="flex:1;">
+                    <div class="file-list-icon">${getFileIcon(f.type, f.id, f.name)}</div>
+                    <div class="file-list-details">
+                        <div class="file-list-name">${escapeHtml(f.name)} <span style="font-size:0.72rem;background:rgba(139,92,246,0.15);color:#a78bfa;padding:2px 8px;border-radius:99px;margin-left:6px;"><i class="fas fa-shield-alt"></i> In Vault</span></div>
+                        <div class="file-list-meta">${formatFileSize(f.size)} &bull; <i class="fas fa-calendar-alt"></i> ${formatDateTime(f.uploaded_at)}</div>
+                    </div>
+                </div>
+                <div class="file-list-actions">
+                    <button title="Preview" onclick="previewFile('${f.id}')"><i class="fas fa-eye"></i></button>
+                    <button title="Download" onclick="downloadFile('${f.id}')"><i class="fas fa-download"></i></button>
+                    <button title="Restore back to My Drive" onclick="toggleFileVault('${f.id}')" style="color:#10b981;"><i class="fas fa-box-open"></i></button>
+                    <button title="Delete" class="delete-file-btn" onclick="deleteFile('${f.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    container.innerHTML = html;
+}
+
+function resetVaultPinPrompt() {
+    showConfirmDialog(
+        'Reset Vault PIN',
+        'Are you sure you want to reset your Vault PIN? You will be prompted to create a new 4-digit PIN.',
+        false
+    ).then(confirmed => {
+        if (!confirmed) return;
+        const email = getCurrentUserEmail() || 'default';
+        localStorage.removeItem(`pd_vault_pin_${email}`);
+        _vaultUnlocked = false;
+        _vaultPinDigits = '';
+        _vaultSetupStep = 1;
+        _vaultTempFirstPin = '';
+        pdToast('info', 'PIN Reset', 'Please create a new 4-digit PIN.', 3000);
+        renderVaultView();
+    });
+}
+window.resetVaultPinPrompt = resetVaultPinPrompt;
 
 let currentShareFolderId = null;
 
@@ -1402,6 +1986,9 @@ async function showSharedWithMeView() {
                     <div class="sfc-footer" style="flex-wrap: wrap; gap: 4px;">
                         <button class="sfc-btn sfc-btn-link" style="min-width: 60px; padding: 6px 8px;" onclick="event.stopPropagation(); if(navigator.clipboard){navigator.clipboard.writeText(window.location.origin + '${shareUrl}').then(()=>pdToast('success','Copied!','Share link copied.',2000))}">
                             <i class="fas fa-link"></i> Share
+                        </button>
+                        <button class="sfc-btn sfc-btn-link zip-download-btn" style="min-width: 60px; padding: 6px 8px;" onclick="event.stopPropagation(); downloadSharedFolderAsZip('${sf.share_token || sf.id}', '${escapeHtml(sf.name)}')">
+                            <i class="fas fa-file-archive"></i> ZIP
                         </button>
                         <button class="sfc-btn sfc-btn-danger" style="min-width: 65px; padding: 6px 8px; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25);" onclick="event.stopPropagation(); removeSharedFolder('${sf.id}', '${sf.share_token}')">
                             <i class="fas fa-trash-alt"></i> Remove
@@ -2623,11 +3210,13 @@ async function showSharedFolderLoggedIn(token, userData) {
         // Update content title with Accept / Accepted badge
         const titleEl = document.getElementById('contentTitle');
         if (titleEl) {
+            const zipBtnHtml = `<button class="btn-primary-sm zip-download-btn" onclick="downloadSharedFolderAsZip('${token}', '${escapeHtml(data.folder.name)}')" style="margin-left:10px;font-size:0.8rem;vertical-align:middle;display:inline-flex;align-items:center;gap:6px;"><i class="fas fa-file-archive"></i> Download as ZIP</button>`;
             if (alreadyAccepted) {
                 titleEl.innerHTML = `${escapeHtml(data.folder.name)}
                     <span style="display:inline-flex;align-items:center;gap:5px;font-size:0.75rem;background:rgba(134,239,172,0.15);color:#86efac;border:1px solid rgba(134,239,172,0.3);padding:3px 10px;border-radius:99px;vertical-align:middle;margin-left:10px;">
                         <i class="fas fa-check-circle"></i> Saved to Shared with me
                     </span>
+                    ${zipBtnHtml}
                     <a href="/?view=shared" style="font-size:0.8rem;color:var(--accent);margin-left:10px;vertical-align:middle;text-decoration:none;">View all →</a>`;
             } else {
                 titleEl.innerHTML = `${escapeHtml(data.folder.name)}
@@ -2636,7 +3225,8 @@ async function showSharedFolderLoggedIn(token, userData) {
                                 background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;padding:6px 14px;
                                 border-radius:8px;cursor:pointer;font-weight:600;">
                         <i class="fas fa-check-circle"></i> Accept & Save to Shared with Me
-                    </button>`;
+                    </button>
+                    ${zipBtnHtml}`;
             }
         }
 
@@ -2962,14 +3552,16 @@ async function loadPublicFolderPreview(token) {
         }
 
         if (nameEl) {
+            const zipBtnHtml = `<button class="btn-primary-sm zip-download-btn" onclick="downloadSharedFolderAsZip('${token}', '${escapeHtml(data.folder.name)}')" style="margin-left:10px;font-size:0.8rem;vertical-align:middle;display:inline-flex;align-items:center;gap:6px;"><i class="fas fa-file-archive"></i> Download as ZIP</button>`;
             if (alreadyAccepted) {
                 nameEl.innerHTML = `${escapeHtml(data.folder.name)}
                     <span style="display:inline-flex;align-items:center;gap:5px;font-size:0.75rem;background:rgba(134,239,172,0.15);color:#86efac;border:1px solid rgba(134,239,172,0.3);padding:3px 10px;border-radius:99px;vertical-align:middle;margin-left:10px;">
                         <i class="fas fa-check-circle"></i> Saved to Shared with me
                     </span>
+                    ${zipBtnHtml}
                     <a href="/?view=shared" style="font-size:0.85rem;color:var(--accent,#7c3aed);margin-left:10px;vertical-align:middle;text-decoration:none;">View all →</a>`;
             } else {
-                nameEl.innerHTML = `${escapeHtml(data.folder.name)} <button class="btn-primary-sm" onclick="acceptSharedFolderInvitation('${token}')" style="margin-left:14px;font-size:0.85rem;vertical-align:middle;display:inline-flex;align-items:center;gap:6px;"><i class="fas fa-check-circle"></i> Accept &amp; Save to Shared with Me</button>`;
+                nameEl.innerHTML = `${escapeHtml(data.folder.name)} <button class="btn-primary-sm" onclick="acceptSharedFolderInvitation('${token}')" style="margin-left:14px;font-size:0.85rem;vertical-align:middle;display:inline-flex;align-items:center;gap:6px;"><i class="fas fa-check-circle"></i> Accept &amp; Save to Shared with Me</button> ${zipBtnHtml}`;
             }
         }
         if (countEl) countEl.textContent = `${data.files ? data.files.length : 0} file(s)`;
@@ -3106,6 +3698,8 @@ window.addEventListener('popstate', async () => {
     const path = window.location.pathname;
     if (path === '/shared-with-me' || path === '/shared') {
         switchView('shared');
+    } else if (path === '/vault') {
+        switchView('vault');
     } else if (path === '/' || path === '') {
         switchView('drive');
     } else {

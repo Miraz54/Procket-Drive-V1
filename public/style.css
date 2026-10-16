@@ -3971,3 +3971,138 @@ body {
     justify-content: center;
     margin: 0 auto;
 }
+
+/* ============================================================
+   FEATURE: Download Folder as ZIP
+   ============================================================ */
+.zip-download-btn {
+    color: #f59e0b !important;
+}
+.zip-download-btn:hover {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #fbbf24 !important;
+}
+
+/* ============================================================
+   FEATURE: Secure Private Vault
+   ============================================================ */
+.vault-nav-lock-badge {
+    margin-left: auto;
+    font-size: 0.72rem;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+}
+
+.vault-container {
+    max-width: 680px;
+    margin: 30px auto;
+    text-align: center;
+    padding: 36px 28px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(16px);
+    animation: fadeIn 0.3s ease;
+}
+
+.vault-shield-icon-wrap {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(99, 102, 241, 0.2));
+    border: 1.5px solid rgba(139, 92, 246, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    color: #a78bfa;
+    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.2);
+}
+
+.vault-shield-icon-wrap.unlocked {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.2));
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #34d399;
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.2);
+}
+
+.vault-pin-dots {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin: 24px 0 20px;
+}
+
+.vault-pin-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border-hover, #64748b);
+    background: transparent;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vault-pin-dot.filled {
+    background: #8b5cf6;
+    border-color: #a78bfa;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+    transform: scale(1.15);
+}
+
+.vault-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    max-width: 280px;
+    margin: 0 auto 16px;
+}
+
+.vault-key {
+    height: 54px;
+    border-radius: 14px;
+    background: var(--bg-input, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    font-size: 1.25rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vault-key:hover {
+    background: var(--accent, #6366f1);
+    color: #fff;
+    border-color: transparent;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.vault-key:active {
+    transform: scale(0.96);
+}
+
+.vault-key-action {
+    font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.vault-autolock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 99px;
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    margin-bottom: 16px;
+}

@@ -14,6 +14,7 @@
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="/qrcode.min.js"></script>
+    <script src="/jszip.min.js"></script>
 </head>
 
 <body class="light-mode">
@@ -145,6 +146,10 @@
                 <a class="sidebar-nav-item" id="navTrash"
                     onclick="(function(){const s=document.getElementById('sidebar');if(s&&window.innerWidth<=900&&s.classList.contains('open')){s.classList.remove('open');const o=document.getElementById('sidebarOverlay');if(o)o.style.display='none';}showTrashView();})()">
                     <i class="fas fa-trash-alt"></i> Trash
+                </a>
+                <a class="sidebar-nav-item" id="navVault" onclick="openVaultView()">
+                    <i class="fas fa-shield-halved" style="color:#a78bfa;"></i> Private Vault
+                    <span class="vault-nav-lock-badge" id="vaultNavLockBadge"><i class="fas fa-lock"></i></span>
                 </a>
 
                 <div class="sidebar-divider" style="margin:10px 0;"></div>
