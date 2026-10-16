@@ -7,7 +7,7 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : supabase;
 
-const { MAX_FILE_SIZE_BYTES, validateFileSafety } = require('../../lib/security');
+const { MAX_FILE_SIZE_BYTES, TOTAL_STORAGE_LIMIT_BYTES, validateFileSafety } = require('../../lib/security');
 const { scanFileBuffer } = require('../../lib/virusScanner');
 
 function setCors(req, res) {
@@ -202,6 +202,20 @@ async function handler(req, res) {
                 error: `Security Alert: File upload rejected. Detected threat: ${virusCheck.threatName}`
             });
         }
+
+        // Check if user's total storage exceeds 1 GB
+        try {
+            const { data: userFiles } = await supabaseAdmin.from('files')
+                .select('file_size')
+                .eq('user_id', userId)
+                .or('is_deleted.eq.0,is_deleted.is.null');
+            const totalUsed = (userFiles || []).reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
+            if ((totalUsed + Number(req.file.size)) > TOTAL_STORAGE_LIMIT_BYTES) {
+                return res.status(400).json({
+                    error: 'Upload rejected: Insufficient storage. This file would exceed your 1 GB total storage limit.'
+                });
+            }
+        } catch (_) {}
 
         // Build safe storage path: storageOwnerId/timestamp-safename
         const safeName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;

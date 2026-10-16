@@ -366,7 +366,7 @@ async function loadStorageStats() {
 }
 
 function updateStorageUI(usedBytes, count, totalBytes) {
-    totalBytes = totalBytes || (15 * 1024 * 1024 * 1024);
+    totalBytes = totalBytes || (1 * 1024 * 1024 * 1024); // 1 GB (Supabase free limit)
     usedBytes = Number(usedBytes) || 0;
     count = Number(count) || 0;
     const pct = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
@@ -436,10 +436,19 @@ async function uploadFile(input) {
     const file = input.files[0];
     if (!file) return;
 
-    // 100MB limit
-    const maxSizeBytes = 100 * 1024 * 1024;
+    // 50MB limit (Supabase Free Tier cap)
+    const maxSizeBytes = 50 * 1024 * 1024;
     if (file.size > maxSizeBytes) {
-        showToast(`⚠️ File too large! Max limit is 100MB (Selected file: ${formatFileSize(file.size)})`, 'error', 5000);
+        showToast(`⚠️ File too large! Maximum limit is 50MB (Selected file: ${formatFileSize(file.size)}). Supabase Free Tier allows up to 50MB per file.`, 'error', 6000);
+        input.value = '';
+        return;
+    }
+
+    // Check if upload exceeds total storage capacity (1 GB)
+    const currentUsed = Array.isArray(allFiles) ? allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) : 0;
+    const maxTotalStorage = 1 * 1024 * 1024 * 1024; // 1 GB
+    if (currentUsed + file.size > maxTotalStorage) {
+        showToast(`⚠️ Storage full! This upload would exceed your 1GB storage limit (${formatFileSize(currentUsed)} / 1GB used).`, 'error', 6000);
         input.value = '';
         return;
     }
@@ -536,12 +545,19 @@ async function proceedUpload(file, input) {
             body: JSON.stringify({
                 filename: file.name,
                 mimeType: file.type || 'application/octet-stream',
-                folder_id: targetFolderId
+                folder_id: targetFolderId,
+                file_size: file.size
             })
         });
 
         const signData = await signRes.json();
-        if (signRes.ok && signData && signData.signedUrl) {
+        if (!signRes.ok) {
+            onUploadError(signData.error || 'Failed to prepare upload URL');
+            if (input) input.value = '';
+            return;
+        }
+
+        if (signData && signData.signedUrl) {
             const xhr = new XMLHttpRequest();
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
@@ -580,7 +596,22 @@ async function proceedUpload(file, input) {
                         onUploadError('Failed to record uploaded file');
                     }
                 } else {
-                    onUploadError(`Direct storage upload failed (${xhr.status})`);
+                    let errMsg = `Direct storage upload failed (${xhr.status})`;
+                    try {
+                        const errData = JSON.parse(xhr.responseText);
+                        if (errData.message && /exceed/i.test(errData.message)) {
+                            errMsg = 'File exceeds storage size limit (50MB). Please select a file under 50MB.';
+                        } else if (errData.message) {
+                            errMsg = errData.message;
+                        } else if (errData.error) {
+                            errMsg = errData.error;
+                        }
+                    } catch (_) {
+                        if (xhr.status === 400 || xhr.status === 413) {
+                            errMsg = `Storage upload rejected (${xhr.status}): File exceeds the 50MB limit.`;
+                        }
+                    }
+                    onUploadError(errMsg);
                 }
             };
 
@@ -849,10 +880,10 @@ function updateDropzoneLabel() {
     if (currentFolderId && folderStack.length > 0) {
         const folderName = folderStack[folderStack.length - 1].name;
         if (textEl) textEl.innerHTML = `Upload into <span class="dropzone-link">${escapeHtml(folderName)}</span>`;
-        if (subEl) subEl.textContent = 'Files will be saved in this folder • Max 100MB per file';
+        if (subEl) subEl.textContent = 'Files will be saved in this folder • Max 50MB per file';
     } else {
         if (textEl) textEl.innerHTML = 'Drop files here or <span class="dropzone-link">click to upload</span>';
-        if (subEl) subEl.textContent = 'Any supported file • Max 100MB per file';
+        if (subEl) subEl.textContent = 'Any supported file • Max 50MB per file';
     }
 }
 

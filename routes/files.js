@@ -66,7 +66,7 @@ async function sendUploadNotification(ownerEmail, uploaderEmail, fileName, folde
     }
 }
 
-const { MAX_FILE_SIZE_BYTES, validateFileSafety, uploadLimiter } = require('../lib/security');
+const { MAX_FILE_SIZE_BYTES, TOTAL_STORAGE_LIMIT_BYTES, validateFileSafety, uploadLimiter } = require('../lib/security');
 const { scanFileBuffer } = require('../lib/virusScanner');
 
 const upload = multer({
@@ -424,8 +424,28 @@ router.post('/upload', uploadLimiter, requireAuth, handleUpload, async (req, res
 router.post('/signed-upload', requireAuth, async (req, res) => {
     const userId = req.session?.userId || req.userId || verifyToken(req);
     try {
-        const { filename, mimeType, folder_id } = req.body || {};
+        const { filename, mimeType, folder_id, file_size } = req.body || {};
         if (!filename) return res.status(400).json({ error: 'Filename is required' });
+
+        if (file_size && Number(file_size) > MAX_FILE_SIZE_BYTES) {
+            return res.status(400).json({ 
+                error: `File is too large. Maximum allowed size is ${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB.` 
+            });
+        }
+
+        // Check if user's total storage exceeds 1 GB
+        try {
+            const { data: userFiles } = await supabaseAdmin.from('files')
+                .select('file_size')
+                .eq('user_id', userId)
+                .eq('is_deleted', 0);
+            const totalUsed = (userFiles || []).reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
+            if (file_size && (totalUsed + Number(file_size)) > TOTAL_STORAGE_LIMIT_BYTES) {
+                return res.status(400).json({
+                    error: `Upload rejected: Insufficient storage. This file would exceed your 1 GB total storage limit.`
+                });
+            }
+        } catch (_) {}
 
         const safetyCheck = validateFileSafety(filename);
         if (!safetyCheck.allowed) {
@@ -877,7 +897,7 @@ router.get('/storage-stats', requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Failed to fetch stats' });
         }
         const usedBytes  = data.reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
-        const totalBytes = 15 * 1024 * 1024 * 1024; // 15 GB cap
+        const totalBytes = TOTAL_STORAGE_LIMIT_BYTES || (1 * 1024 * 1024 * 1024); // 1 GB cap (Supabase free tier limit)
         storageStatsCache.set(userId, { used: usedBytes, total: totalBytes, count: data.length, time: now });
         res.json({ used: usedBytes, total: totalBytes, count: data.length });
     } catch (err) {

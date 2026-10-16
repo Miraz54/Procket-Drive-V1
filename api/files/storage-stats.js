@@ -1,5 +1,6 @@
 const supabase = require('../../lib/supabase');
 const { requireAuth } = require('../../lib/auth');
+const { TOTAL_STORAGE_LIMIT_BYTES } = require('../../lib/security');
 
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
@@ -28,7 +29,7 @@ module.exports = async function handler(req, res) {
 
         const filesList  = data || [];
         const usedBytes  = filesList.reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
-        const totalBytes = 15 * 1024 * 1024 * 1024; // 15 GB
+        const totalBytes = TOTAL_STORAGE_LIMIT_BYTES || (1 * 1024 * 1024 * 1024); // 1 GB (Supabase free limit)
 
         res.json({ used: usedBytes, total: totalBytes, count: filesList.length });
     } catch (err) {
