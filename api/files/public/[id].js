@@ -1,4 +1,9 @@
+const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../../../lib/supabase');
+
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    : supabase;
 
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
@@ -18,12 +23,12 @@ module.exports = async function handler(req, res) {
     const { id } = req.query;
 
     try {
-        const { data: file, error } = await supabase
+        const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('id, file_path, original_name, mime_type, file_size, uploaded_at')
             .eq('id', id)
             .eq('is_deleted', 0)
-            .single();
+            .maybeSingle();
 
         if (error || !file) return res.status(404).json({ error: 'File not found or deleted' });
 

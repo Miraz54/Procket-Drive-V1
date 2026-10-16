@@ -1,4 +1,9 @@
+const { createClient } = require('@supabase/supabase-js');
 const supabase = require('../../../../lib/supabase');
+
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    : supabase;
 
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
@@ -18,20 +23,20 @@ module.exports = async function handler(req, res) {
     const { id } = req.query;
 
     try {
-        const { data: file, error } = await supabase
+        const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('file_path, original_name, mime_type')
             .eq('id', id)
             .eq('is_deleted', 0)
-            .single();
+            .maybeSingle();
 
         if (error || !file) return res.status(404).json({ error: 'File not found' });
 
         const parts = file.file_path.split('/userfiles/');
         if (parts.length < 2) return res.status(500).json({ error: 'Invalid file path' });
-        const storagePath = parts[1];
+        const storagePath = parts.slice(1).join('/userfiles/');
 
-        const { data, error: downloadError } = await supabase.storage
+        const { data, error: downloadError } = await supabaseAdmin.storage
             .from('userfiles')
             .download(storagePath);
 

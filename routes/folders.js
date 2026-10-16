@@ -229,7 +229,7 @@ router.get('/public/:token', async (req, res) => {
             }
         }
 
-        const { data: files } = await supabase.from('files')
+        const { data: files } = await supabaseAdmin.from('files')
             .select('id, original_name, file_size, mime_type, uploaded_at, file_path')
             .eq('folder_id', folder.id)
             .eq('is_deleted', 0)

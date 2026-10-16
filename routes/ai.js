@@ -26,12 +26,11 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 // ── Gemini API helper with automatic fallback & retry ─────────────
 const GEMINI_MODELS = [
-    'gemini-flash-latest',
-    'gemini-3.8-flash',
-    'gemini-3.6-flash',
-    'gemini-3.7-flash',
+    'gemini-3-flash-preview',
     'gemini-3.5-flash',
-    'gemini-3.1-flash-lite'
+    'gemini-3.6-flash',
+    'gemini-flash-latest',
+    'gemini-pro-latest'
 ];
 
 async function callGemini(preferredModel, contents) {
@@ -56,7 +55,7 @@ async function callGemini(preferredModel, contents) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents }),
-                signal: AbortSignal.timeout(6000)
+                signal: AbortSignal.timeout(25000)
             });
 
             if (resp.ok) {
@@ -379,10 +378,14 @@ router.post('/ocr', requireAuth, async (req, res) => {
         let extractedText = '';
 
         if (mime.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|tiff?)$/i.test(name)) {
-            // 1. Primary: Use Tesseract.js for image OCR
+            // 1. Primary: Use Tesseract.js for image OCR with local eng.traineddata
             try {
                 const { createWorker } = require('tesseract.js');
-                const worker = await createWorker('eng');
+                const projectRoot = path.resolve(__dirname, '..');
+                const worker = await createWorker('eng', 1, {
+                    langPath: projectRoot,
+                    cachePath: projectRoot
+                });
                 try {
                     const { data: { text } } = await worker.recognize(buffer);
                     extractedText = (text || '').trim();
@@ -398,7 +401,7 @@ router.post('/ocr', requireAuth, async (req, res) => {
                 try {
                     const base64Img = buffer.toString('base64');
                     const imgMime = mime.startsWith('image/') ? mime : 'image/jpeg';
-                    const geminiRes = await callGemini('gemini-flash-latest', [
+                    const geminiRes = await callGemini('gemini-3-flash-preview', [
                         {
                             role: 'user',
                             parts: [
@@ -418,13 +421,16 @@ router.post('/ocr', requireAuth, async (req, res) => {
             }
         } else if (mime === 'application/pdf' || name.endsWith('.pdf')) {
             // 1. Primary: Extract embedded digital text from PDF
-            extractedText = await extractPdfText(buffer);
+            const digitalText = await extractPdfText(buffer);
+            const cleanDigital = (digitalText || '').replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '').trim();
 
-            // 2. Fallback: If scanned / image-only PDF, use Gemini Multimodal OCR
-            if (!extractedText || extractedText.length < 20) {
+            if (cleanDigital && cleanDigital.length >= 25) {
+                extractedText = cleanDigital;
+            } else {
+                // 2. Fallback: If scanned / image-only PDF, use Gemini Multimodal OCR
                 try {
                     const base64Pdf = buffer.toString('base64');
-                    const geminiRes = await callGemini('gemini-flash-latest', [
+                    const geminiRes = await callGemini('gemini-3-flash-preview', [
                         {
                             role: 'user',
                             parts: [
@@ -441,13 +447,42 @@ router.post('/ocr', requireAuth, async (req, res) => {
                 } catch(pdfGeminiErr) {
                     console.warn('[ocr] Gemini PDF multimodal OCR error:', pdfGeminiErr.message);
                 }
+
+                // If Gemini failed or got nothing, retain any digital text available
+                if (!extractedText && cleanDigital) {
+                    extractedText = cleanDigital;
+                }
+            }
+        } else if (
+            mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            mime === 'application/msword' ||
+            name.endsWith('.docx') ||
+            name.endsWith('.doc')
+        ) {
+            // 3. Word documents (.docx, .doc) via mammoth
+            try {
+                const mammoth = require('mammoth');
+                const result = await mammoth.extractRawText({ buffer });
+                extractedText = (result.value || '').trim();
+            } catch(docErr) {
+                console.warn('[ocr] Mammoth DOCX extract error:', docErr.message);
+            }
+        } else if (
+            mime.startsWith('text/') ||
+            /\.(txt|md|csv|json|js|jsx|ts|tsx|html|htm|css|py|java|c|cpp|h|log|xml|yaml|yml|sql|sh)$/i.test(name)
+        ) {
+            // 4. Plain text & code files
+            try {
+                extractedText = buffer.toString('utf-8').trim();
+            } catch(txtErr) {
+                console.warn('[ocr] Text buffer decoding error:', txtErr.message);
             }
         } else {
-            return res.status(400).json({ error: 'OCR supports image files (JPG, PNG, WebP) and PDF documents.' });
+            return res.status(400).json({ error: 'Text extraction supports images (JPG, PNG, WebP), PDFs, Word documents (.docx), and text/code files (.txt, .md, .csv).' });
         }
 
         if (!extractedText) {
-            return res.json({ success: true, text: '', message: 'No text found in the file.' });
+            return res.json({ success: true, text: '', message: 'No text found in the file. Please ensure the document or image contains readable text.' });
         }
 
         let savedFile = null;
@@ -638,7 +673,7 @@ Provide the summary clearly formatted.`
         }
 
         // Call Gemini for summarization
-        const geminiRes = await callGemini('gemini-flash-latest', geminiContents);
+        const geminiRes = await callGemini('gemini-3-flash-preview', geminiContents);
 
         let summary = '';
         try {

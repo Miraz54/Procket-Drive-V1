@@ -801,30 +801,43 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
 });
 
 
-// Download (force attachment) — allows owner OR folder collaborator
-router.get('/download/:id', requireAuth, async (req, res) => {
-    const { data: file, error } = await supabase.from('files')
-        .select('file_path, original_name, mime_type, user_id, folder_id')
-        .eq('id', req.params.id)
-        .eq('is_deleted', 0)
-        .maybeSingle();
-    if (error || !file) return res.status(404).json({ error: 'File not found' });
+// Download (force attachment) — allows owner, collaborator, or public link access
+router.get('/download/:id', async (req, res) => {
+    try {
+        const userId = (req.session && req.session.userId) || verifyToken(req);
 
-    // Check: must be file owner OR have folder access
-    const isOwner = String(file.user_id) === String(req.session.userId);
-    if (!isOwner && file.folder_id) {
-        const hasAccess = await checkFolderAccess(req.session.userId, file.folder_id);
-        if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
-    } else if (!isOwner) {
-        return res.status(403).json({ error: 'Access denied' });
+        const { data: file, error } = await supabaseAdmin.from('files')
+            .select('file_path, original_name, mime_type, user_id, folder_id')
+            .eq('id', req.params.id)
+            .eq('is_deleted', 0)
+            .maybeSingle();
+        if (error || !file) return res.status(404).json({ error: 'File not found' });
+
+        // If authenticated user, verify permissions if in folder
+        if (userId) {
+            const isOwner = String(file.user_id) === String(userId);
+            if (!isOwner && file.folder_id) {
+                const hasAccess = await checkFolderAccess(userId, file.folder_id);
+                if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+            }
+        }
+
+        const parts = file.file_path.split('/userfiles/');
+        if (parts.length < 2) return res.status(500).json({ error: 'Invalid file path' });
+        const storagePath = parts.slice(1).join('/userfiles/');
+
+        const { data, error: downloadError } = await supabaseAdmin.storage.from('userfiles').download(storagePath);
+        if (downloadError) return res.status(500).json({ error: 'Download failed: ' + downloadError.message });
+
+        const buffer = Buffer.from(await data.arrayBuffer());
+        res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"; filename*=UTF-8''${encodeURIComponent(file.original_name)}`);
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
+    } catch(err) {
+        console.error('[download] error:', err);
+        res.status(500).json({ error: 'Server error' });
     }
-
-    const storagePath = file.file_path.split('/').slice(file.file_path.split('/').indexOf('userfiles') + 1).join('/');
-    const { data, error: downloadError } = await supabase.storage.from('userfiles').download(storagePath);
-    if (downloadError) return res.status(500).json({ error: 'Download failed' });
-    res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
-    res.send(Buffer.from(await data.arrayBuffer()));
 });
 
 
@@ -896,12 +909,12 @@ router.get('/share/:id', requireAuth, async (req, res) => {
 // ======================== PUBLIC VIEW (no auth) ========================
 router.get('/public/:id', async (req, res) => {
     try {
-        const { data: file, error } = await supabase
+        const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('id, file_path, original_name, mime_type, file_size, uploaded_at')
             .eq('id', req.params.id)
             .eq('is_deleted', 0)
-            .single();
+            .maybeSingle();
         if (error || !file) return res.status(404).json({ error: 'File not found or deleted' });
         res.json({
             id: file.id,
@@ -920,7 +933,7 @@ router.get('/public/:id', async (req, res) => {
 // PUBLIC INLINE PREVIEW (no auth required) — direct streaming
 router.get('/public/preview/:id', async (req, res) => {
     try {
-        const { data: file, error } = await supabase
+        const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('file_path, original_name, mime_type')
             .eq('id', req.params.id)
@@ -931,8 +944,9 @@ router.get('/public/preview/:id', async (req, res) => {
         // Stream through server to avoid cross-origin / redirect CORS issues
         const parts = file.file_path.split('/userfiles/');
         if (parts.length < 2) return res.status(500).json({ error: 'Invalid file path' });
-        const storagePath = parts[1];
-        const { data, error: downloadError } = await supabase.storage.from('userfiles').download(storagePath);
+        const storagePath = parts.slice(1).join('/userfiles/');
+
+        const { data, error: downloadError } = await supabaseAdmin.storage.from('userfiles').download(storagePath);
         if (downloadError) return res.status(500).json({ error: 'Download failed' });
         const buffer = Buffer.from(await data.arrayBuffer());
         res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
@@ -947,7 +961,7 @@ router.get('/public/preview/:id', async (req, res) => {
 // PUBLIC DOWNLOAD (no auth required) — direct streaming
 router.get('/public/download/:id', async (req, res) => {
     try {
-        const { data: file, error } = await supabase
+        const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('file_path, original_name, mime_type')
             .eq('id', req.params.id)
@@ -956,14 +970,19 @@ router.get('/public/download/:id', async (req, res) => {
         if (error || !file) return res.status(404).json({ error: 'File not found' });
 
         // Stream through server
-        const storagePath = file.file_path
-            .split('/').slice(file.file_path.split('/').indexOf('userfiles') + 1).join('/');
-        const { data, error: dlErr } = await supabase.storage.from('userfiles').download(storagePath);
-        if (dlErr) return res.status(500).json({ error: 'Download failed' });
+        const parts = file.file_path.split('/userfiles/');
+        if (parts.length < 2) return res.status(500).json({ error: 'Invalid file path' });
+        const storagePath = parts.slice(1).join('/userfiles/');
+
+        const { data, error: dlErr } = await supabaseAdmin.storage.from('userfiles').download(storagePath);
+        if (dlErr) return res.status(500).json({ error: 'Download failed: ' + dlErr.message });
+        const buffer = Buffer.from(await data.arrayBuffer());
         res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
-        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
-        res.send(Buffer.from(await data.arrayBuffer()));
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"; filename*=UTF-8''${encodeURIComponent(file.original_name)}`);
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
     } catch (err) {
+        console.error('[public/download] error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });

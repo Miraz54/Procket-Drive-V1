@@ -2316,7 +2316,7 @@ function showConfirmDialog(title, message, isDanger = true) {
 // Public previews & routing
 async function checkPublicShareRoute() {
     const path = window.location.pathname;
-    let match = path.match(/^\/(?:share\/file|s)\/([^\/]+)/);
+    let match = path.match(/^\/(?:share\/file|s|file|f)\/([^\/]+)/);
     if (match) {
         const fileId = match[1];
         showPublicPreviewLayout();
@@ -2324,7 +2324,7 @@ async function checkPublicShareRoute() {
         return true;
     }
 
-    match = path.match(/^\/shared-folder\/([^\/]+)/);
+    match = path.match(/^\/(?:shared-folder|folder)\/([^\/]+)/);
     if (match) {
         const token = match[1];
 
@@ -2491,6 +2491,7 @@ async function showSharedFolderLoggedIn(token, userData) {
 }
 
 function showPublicPreviewLayout() {
+    hideInitSpinner();
     const authPage = document.getElementById('authPage');
     const appPage = document.getElementById('appPage');
     const pubPage = document.getElementById('publicPreviewPage');
@@ -2500,6 +2501,7 @@ function showPublicPreviewLayout() {
 }
 
 async function loadPublicFilePreview(fileId) {
+    hideInitSpinner();
     const loading = document.getElementById('publicLoading');
     const errorBox = document.getElementById('publicError');
     const contentBox = document.getElementById('publicContent');
@@ -2543,7 +2545,24 @@ async function loadPublicFilePreview(fileId) {
         if (dateEl) dateEl.textContent = file.uploaded_at ? new Date(file.uploaded_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
         if (iconEl) iconEl.innerHTML = getFileIcon(fileType, fileId, fileName);
 
-        if (dlBtn) dlBtn.href = publicDownloadUrl;
+        if (dlBtn) {
+            dlBtn.href = publicDownloadUrl;
+            dlBtn.setAttribute('download', fileName);
+            dlBtn.onclick = function (e) {
+                // Guaranteed immediate download trigger for incognito & all mobile/desktop browsers
+                window.location.href = publicDownloadUrl;
+            };
+        }
+
+        const headerDlBtn = document.getElementById('pubHeaderDownloadBtn');
+        if (headerDlBtn) {
+            headerDlBtn.href = publicDownloadUrl;
+            headerDlBtn.setAttribute('download', fileName);
+            headerDlBtn.style.display = 'inline-flex';
+            headerDlBtn.onclick = function (e) {
+                window.location.href = publicDownloadUrl;
+            };
+        }
 
         // Render Media Preview
         renderPublicMediaPreview(fileId, fileName, fileType, file.url || publicPreviewUrl);
@@ -3015,8 +3034,8 @@ async function openAIFilePicker(callback, filterType) {
         // Document summarizer: text documents (PDF, DOCX)
         if (tabImage) tabImage.style.display = 'none';
     } else if (_aiPickerFilter === 'ocr') {
-        // OCR: scanned images & PDFs
-        if (tabDocx) tabDocx.style.display = 'none';
+        // OCR: scanned images, PDFs, Word docs & text files
+        // All tabs enabled
     }
 
     openModal('aiFilePickerModal');
@@ -3097,12 +3116,17 @@ function renderAIFilePicker(query) {
             )
         );
     } else if (_aiPickerFilter === 'ocr') {
-        // OCR works on images and PDFs
+        // OCR works on images, PDFs, Word docs, and text files
         files = files.filter(f =>
             (f.type || '').startsWith('image/') ||
-            /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name || '') ||
+            /\.(jpe?g|png|webp|bmp|gif|tiff?)$/i.test(f.name || '') ||
             f.type === 'application/pdf' ||
-            (f.name || '').toLowerCase().endsWith('.pdf')
+            (f.name || '').toLowerCase().endsWith('.pdf') ||
+            (f.name || '').toLowerCase().endsWith('.docx') ||
+            (f.name || '').toLowerCase().endsWith('.doc') ||
+            f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            (f.type || '').startsWith('text/') ||
+            /\.(txt|md|csv|json|log|xml|html)$/i.test(f.name || '')
         );
     }
 
@@ -3112,7 +3136,14 @@ function renderAIFilePicker(query) {
     } else if (_aiPickerCategory === 'pdf') {
         files = files.filter(f => f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
     } else if (_aiPickerCategory === 'docx') {
-        files = files.filter(f => (f.name || '').toLowerCase().endsWith('.docx') || (f.name || '').toLowerCase().endsWith('.doc'));
+        files = files.filter(f =>
+            (f.name || '').toLowerCase().endsWith('.docx') ||
+            (f.name || '').toLowerCase().endsWith('.doc') ||
+            f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            (f.type || '').startsWith('text/') ||
+            /\.(txt|md|csv|json|log|xml|html)$/i.test(f.name || '')
+        );
+    }
     }
 
     if (query) {

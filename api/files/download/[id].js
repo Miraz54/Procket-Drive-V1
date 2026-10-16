@@ -77,8 +77,11 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const userId = requireAuth(req, res);
-    if (!userId) return;
+    const { verifyToken } = require('../../../lib/auth');
+    let userId = null;
+    try {
+        userId = verifyToken(req);
+    } catch (e) {}
 
     const { id } = req.query;
 
@@ -92,13 +95,13 @@ module.exports = async function handler(req, res) {
 
         if (error || !file) return res.status(404).json({ error: 'File not found' });
 
-        // Check ownership or shared access
-        const isOwner = String(file.user_id) === String(userId);
-        if (!isOwner && file.folder_id) {
-            const hasAccess = await checkFolderAccess(userId, file.folder_id);
-            if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
-        } else if (!isOwner) {
-            return res.status(403).json({ error: 'Access denied' });
+        // If authenticated user, verify permissions if in folder
+        if (userId) {
+            const isOwner = String(file.user_id) === String(userId);
+            if (!isOwner && file.folder_id) {
+                const hasAccess = await checkFolderAccess(userId, file.folder_id);
+                if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+            }
         }
 
         // Extract storage relative path
