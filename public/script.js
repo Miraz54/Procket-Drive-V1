@@ -149,6 +149,9 @@ async function checkAuth() {
             if (window.location.search.includes('view=shared') || window.location.hash === '#shared' || window.location.pathname === '/shared' || window.location.pathname === '/shared-with-me') {
                 switchView('shared');
                 loadUserProfile();
+            } else if (window.location.pathname === '/vault') {
+                switchView('vault');
+                await Promise.all([loadFiles(), loadUserProfile()]);
             } else {
                 // Fetch files and profile concurrently in parallel for fast login
                 await Promise.all([loadFiles(), loadUserProfile()]);
@@ -312,9 +315,7 @@ function switchView(view) {
         if (overlay) overlay.style.display = 'none';
     }
 
-    if (view !== 'vault' && _vaultUnlocked) {
-        lockVault(false);
-    }
+    // Vault stays unlocked during the 2-minute session countdown (or until user explicitly clicks Lock Vault)
 
     if (view === 'drive') {
         document.getElementById('navMyDrive')?.classList.add('active');
@@ -495,12 +496,12 @@ async function uploadFile(input) {
     proceedUpload(file, input);
 }
 
-async function proceedUpload(file, input) {
+async function proceedUpload(file, input, isVault = false) {
     const isSharedView = window.location.pathname.includes('/shared-folder/') || activeNav === 'shared';
     if (!isSharedView) {
         sharedFolderId = null; // Clean up so it never leaks into My Drive
     }
-    const targetFolderId = isSharedView ? (sharedFolderId || currentFolderId) : currentFolderId;
+    const targetFolderId = isSharedView ? (sharedFolderId || currentFolderId) : (isVault ? null : currentFolderId);
 
     const progressWrap = document.getElementById('uploadProgressContainer');
     const progressBar = document.getElementById('uploadProgressBar');
@@ -510,9 +511,9 @@ async function proceedUpload(file, input) {
     if (progressWrap) progressWrap.style.display = 'block';
     if (progressBar) { progressBar.style.width = '0%'; progressBar.style.transition = 'width 0.25s ease'; progressBar.classList.remove('upload-processing'); }
     if (progressPct) progressPct.textContent = '0%';
-    if (progressFilename) progressFilename.textContent = file.name;
+    if (progressFilename) progressFilename.textContent = (isVault ? '🔒 [Vault] ' : '') + file.name;
 
-    const onUploadSuccess = () => {
+    const onUploadSuccess = (uploadedFile) => {
         if (progressBar) {
             progressBar.style.width = '100%';
             progressBar.classList.remove('upload-processing');
@@ -527,7 +528,18 @@ async function proceedUpload(file, input) {
                 progressWrap.style.transition = '';
             }, 300);
         }
-        showToast(`✅ ${file.name} uploaded!`, 'success');
+
+        if (isVault) {
+            const vaultIds = getVaultFileIds();
+            const newId = uploadedFile && uploadedFile.id ? String(uploadedFile.id) : null;
+            if (newId && !vaultIds.includes(newId)) {
+                vaultIds.push(newId);
+                saveVaultFileIds(vaultIds);
+            }
+            pdToast('success', 'Secured in Vault! 🛡️', `"${file.name}" was uploaded directly into your Private Vault.`, 3500);
+        } else {
+            showToast(`✅ ${file.name} uploaded!`, 'success');
+        }
 
         const sharedMatch = window.location.pathname.match(/^\/shared-folder\/([^\/]+)/);
         if (sharedMatch) {
@@ -540,7 +552,19 @@ async function proceedUpload(file, input) {
         } else {
             const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) + file.size;
             updateStorageUI(localUsed, allFiles.length + 1);
-            loadFiles();
+            loadFiles().then(() => {
+                if (isVault) {
+                    const vaultIds = getVaultFileIds();
+                    const matched = allFiles.find(f => f.name === file.name && Math.abs(f.size - file.size) < 10);
+                    if (matched && !vaultIds.includes(String(matched.id))) {
+                        vaultIds.push(String(matched.id));
+                        saveVaultFileIds(vaultIds);
+                    }
+                    if (activeNav === 'vault') {
+                        renderVaultView();
+                    }
+                }
+            });
         }
     };
 
@@ -602,7 +626,7 @@ async function proceedUpload(file, input) {
                         });
                         const metaData = await metaRes.json();
                         if (metaRes.ok && metaData && metaData.success) {
-                            onUploadSuccess();
+                            onUploadSuccess(metaData.file);
                         } else {
                             onUploadError(metaData.error || 'Failed to save file record');
                         }
@@ -666,7 +690,7 @@ async function proceedUpload(file, input) {
         let response = null;
         try { response = JSON.parse(xhr.responseText); } catch (e) { }
         if (xhr.status === 200 && response && response.success) {
-            onUploadSuccess();
+            onUploadSuccess(response.file);
         } else {
             const errorMsg = (response && response.error) || `Upload failed (${xhr.status || 'Server error'})`;
             onUploadError(errorMsg);
@@ -679,6 +703,31 @@ async function proceedUpload(file, input) {
     xhr.send(formData);
     if (input) input.value = '';
 }
+
+async function uploadDirectToVault(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    // 50MB limit cap
+    const maxSizeBytes = 50 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+        showToast(`⚠️ File too large! Maximum limit is 50MB (Selected file: ${formatFileSize(file.size)}).`, 'error', 6000);
+        input.value = '';
+        return;
+    }
+
+    // Storage capacity cap (15 GB)
+    const currentUsed = Array.isArray(allFiles) ? allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) : 0;
+    const maxTotalStorage = 15 * 1024 * 1024 * 1024;
+    if (currentUsed + file.size > maxTotalStorage) {
+        showToast(`⚠️ Storage full! This upload would exceed your 15GB storage limit.`, 'error', 6000);
+        input.value = '';
+        return;
+    }
+
+    proceedUpload(file, input, true);
+}
+window.uploadDirectToVault = uploadDirectToVault;
 
 // Drag & drop upload
 function handleDrop(event) {
@@ -738,7 +787,11 @@ async function loadFiles() {
             if (Array.isArray(data)) allFolders = data;
         }
 
-        renderDriveView();
+        if (activeNav === 'vault') {
+            renderVaultView();
+        } else {
+            renderDriveView();
+        }
         const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
         updateStorageUI(localUsed, allFiles.length);
     } catch (e) { console.error(e); }
@@ -763,6 +816,10 @@ async function refreshCurrentView() {
 
 
 function filterFiles(query) {
+    if (activeNav === 'vault') {
+        renderVaultView(query);
+        return;
+    }
     if (!query.trim()) { renderDriveView(); return; }
     const q = query.toLowerCase();
     const filteredFiles = allFiles.filter(f => f.name.toLowerCase().includes(q));
@@ -1455,7 +1512,7 @@ function toggleFileVault(fileId) {
 }
 window.toggleFileVault = toggleFileVault;
 
-function renderVaultView() {
+function renderVaultView(searchQuery = '') {
     const container = document.getElementById('fileList');
     if (!container) return;
     container.className = "file-container";
@@ -1470,7 +1527,7 @@ function renderVaultView() {
         return;
     }
 
-    renderVaultFilesUI(container);
+    renderVaultFilesUI(container, searchQuery);
 }
 
 function renderVaultSetupUI(container) {
@@ -1649,39 +1706,73 @@ function processVaultPinSubmission() {
     }
 }
 
-function renderVaultFilesUI(container) {
+function renderVaultFilesUI(container, searchQuery = '') {
     const vaultIds = getVaultFileIds();
-    const vaultFiles = allFiles.filter(f => vaultIds.includes(String(f.id)));
+    let vaultFiles = allFiles.filter(f => vaultIds.includes(String(f.id)));
+
+    // Sort alphabetically (A-Z)
+    vaultFiles.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
+
+    const totalVaultCount = vaultFiles.length;
+
+    if (searchQuery && searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        vaultFiles = vaultFiles.filter(f => (f.name || '').toLowerCase().includes(q));
+    }
+
+    // Keep container as a clean block element so the banner spans 100% width!
+    container.className = "file-container";
+
+    const m = Math.floor(_vaultCountdownSeconds / 60);
+    const s = _vaultCountdownSeconds % 60;
+    const timeDisplay = `${m}:${s < 10 ? '0' : ''}${s}`;
 
     let html = `
-        <div style="margin-bottom:20px;padding:16px 20px;background:linear-gradient(135deg,rgba(139,92,246,0.12),rgba(99,102,241,0.06));border:1px solid rgba(139,92,246,0.3);border-radius:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-            <div style="display:flex;align-items:center;gap:12px;">
-                <div style="width:42px;height:42px;border-radius:12px;background:#8b5cf6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+        <!-- Full-width Vault Header Banner -->
+        <div class="vault-header-banner">
+            <div class="vault-header-left">
+                <div class="vault-header-icon">
                     <i class="fas fa-shield-halved"></i>
                 </div>
                 <div>
-                    <h3 style="margin:0;font-size:1.1rem;color:var(--text-1);">Private Vault (Unlocked)</h3>
-                    <p style="margin:2px 0 0;font-size:0.8rem;color:var(--text-2);">${vaultFiles.length} private file(s) protected &amp; hidden from Drive</p>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <h3 class="vault-header-title">Private Vault</h3>
+                        <span class="vault-status-pill unlocked"><i class="fas fa-unlock"></i> Unlocked</span>
+                    </div>
+                    <p class="vault-header-subtitle">${totalVaultCount} private file(s) protected &amp; hidden from Drive</p>
                 </div>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;">
-                <span class="vault-autolock-badge" id="vaultCountdownBadge" style="margin:0;"><i class="fas fa-hourglass-half"></i> Auto-locks in 2:00</span>
-                <button class="btn-secondary-action" style="padding:7px 14px;font-size:0.85rem;" onclick="lockVault()">
+            <div class="vault-header-actions">
+                <button class="btn-primary vault-upload-btn" onclick="document.getElementById('vaultDirectFileInput').click()">
+                    <i class="fas fa-cloud-arrow-up"></i> Upload to Vault
+                </button>
+                <button class="btn-secondary-action vault-add-drive-btn" onclick="openVaultImportModal()">
+                    <i class="fas fa-folder-plus"></i> Add from Drive
+                </button>
+                <span class="vault-autolock-badge" id="vaultCountdownBadge">
+                    <i class="fas fa-hourglass-half"></i> Auto-locks in ${timeDisplay}
+                </span>
+                <button class="btn-secondary-action vault-lock-btn" onclick="lockVault()">
                     <i class="fas fa-lock"></i> Lock Vault
                 </button>
             </div>
         </div>
     `;
 
-    if (vaultFiles.length === 0) {
+    if (totalVaultCount === 0) {
         html += `
             <div class="empty-state" style="padding:60px 20px;">
-                <div class="empty-state-icon" style="color:#a78bfa;"><i class="fas fa-shield-halved"></i></div>
-                <p>Your Private Vault is Empty</p>
-                <small>Go to My Drive and click the shield icon <i class="fas fa-shield-alt"></i> on any file to hide and protect it here.</small>
-                <div style="margin-top:16px;">
-                    <button class="btn-primary" onclick="switchView('drive')" style="display:inline-flex;align-items:center;gap:8px;">
-                        <i class="fas fa-folder-open"></i> Go to My Drive
+                <div class="empty-state-icon" style="color:#a78bfa;width:72px;height:72px;border-radius:20px;font-size:32px;">
+                    <i class="fas fa-shield-halved"></i>
+                </div>
+                <p style="font-size:1.15rem;margin-top:8px;">Your Private Vault is Empty</p>
+                <small style="max-width:440px;line-height:1.5;">Files in your Private Vault are strictly hidden from My Drive and require your 4-digit PIN to access.</small>
+                <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+                    <button class="btn-primary vault-upload-btn" onclick="document.getElementById('vaultDirectFileInput').click()" style="padding:10px 20px;font-size:0.9rem;">
+                        <i class="fas fa-cloud-arrow-up"></i> Upload File Directly to Vault
+                    </button>
+                    <button class="btn-secondary-action vault-add-drive-btn" onclick="openVaultImportModal()" style="padding:10px 20px;font-size:0.9rem;">
+                        <i class="fas fa-folder-plus"></i> Select &amp; Import from Drive
                     </button>
                 </div>
             </div>
@@ -1690,8 +1781,22 @@ function renderVaultFilesUI(container) {
         return;
     }
 
+    if (vaultFiles.length === 0 && searchQuery) {
+        html += `
+            <div class="empty-state" style="padding:50px 20px;">
+                <div class="empty-state-icon" style="color:#a78bfa;"><i class="fas fa-search"></i></div>
+                <p>No matching private files</p>
+                <small>No files matching "${escapeHtml(searchQuery)}" found in your Private Vault.</small>
+            </div>
+        `;
+        container.innerHTML = html;
+        return;
+    }
+
+    // Wrap file cards in sub-container matching currentView so banner is completely independent of grid!
+    html += `<div class="file-container ${currentView === 'grid' ? 'grid-view' : 'list-view'}" style="padding:0;min-height:auto;width:100%;">`;
+
     if (currentView === 'grid') {
-        container.className = "file-container grid-view";
         html += vaultFiles.map(f => `
             <div class="file-card" style="border-color:rgba(139,92,246,0.3);background:linear-gradient(180deg,var(--bg-card),rgba(139,92,246,0.03));">
                 <div class="file-icon">${getFileIcon(f.type, f.id, f.name)}</div>
@@ -1707,7 +1812,6 @@ function renderVaultFilesUI(container) {
             </div>
         `).join('');
     } else {
-        container.className = "file-container list-view";
         html += vaultFiles.map(f => `
             <div class="file-list-item" style="border-left:3px solid #8b5cf6;">
                 <div class="file-list-info" style="flex:1;">
@@ -1727,8 +1831,122 @@ function renderVaultFilesUI(container) {
         `).join('');
     }
 
+    html += `</div>`;
     container.innerHTML = html;
 }
+
+// ────────────────────────────────────────────────────────────
+// In-Vault Drive File Picker Modal Handlers
+// ────────────────────────────────────────────────────
+let _vaultImportSearchQuery = '';
+
+function openVaultImportModal() {
+    _vaultImportSearchQuery = '';
+    const input = document.getElementById('vaultImportSearch');
+    if (input) input.value = '';
+    renderVaultImportFileList();
+    openModal('vaultImportModal');
+}
+window.openVaultImportModal = openVaultImportModal;
+
+function filterVaultImportFiles(query) {
+    _vaultImportSearchQuery = (query || '').trim().toLowerCase();
+    renderVaultImportFileList();
+}
+window.filterVaultImportFiles = filterVaultImportFiles;
+
+function renderVaultImportFileList() {
+    const listEl = document.getElementById('vaultImportList');
+    if (!listEl) return;
+
+    const vaultIds = getVaultFileIds();
+    let availableFiles = allFiles.filter(f => !vaultIds.includes(String(f.id)));
+
+    // Sort alphabetically (A-Z)
+    availableFiles.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
+
+    if (_vaultImportSearchQuery) {
+        availableFiles = availableFiles.filter(f => (f.name || '').toLowerCase().includes(_vaultImportSearchQuery));
+    }
+
+    if (availableFiles.length === 0) {
+        listEl.innerHTML = `
+            <div style="text-align:center;padding:34px 10px;color:var(--text-3);">
+                <i class="fas fa-shield-halved" style="font-size:2rem;margin-bottom:8px;opacity:0.5;color:#a78bfa;"></i>
+                <p style="margin:0;font-size:0.95rem;font-weight:600;color:var(--text-2);">
+                    ${_vaultImportSearchQuery ? 'No matching files found' : 'No available files to import'}
+                </p>
+                <small style="color:var(--text-3);">
+                    ${_vaultImportSearchQuery ? 'Try a different search query.' : 'All files in your Drive are already secured in Vault, or your Drive is empty.'}
+                </small>
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = availableFiles.map(f => `
+        <div class="vault-import-item" id="vault-import-item-${f.id}">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+                <div style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--bg-card);flex-shrink:0;">
+                    ${getFileIcon(f.type, f.id, f.name)}
+                </div>
+                <div style="min-width:0;flex:1;">
+                    <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(f.name)}">
+                        ${escapeHtml(f.name)}
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-3);">
+                        ${formatFileSize(f.size)} &bull; ${formatDateTime(f.uploaded_at)}
+                    </div>
+                </div>
+            </div>
+            <button class="btn-primary" onclick="importFileToVault('${f.id}')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;padding:6px 14px;font-size:0.8rem;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border-radius:8px;flex-shrink:0;cursor:pointer;">
+                <i class="fas fa-plus"></i> Move to Vault
+            </button>
+        </div>
+    `).join('');
+}
+
+function importFileToVault(fileId) {
+    const file = allFiles.find(f => String(f.id) === String(fileId));
+    const fileName = file ? file.name : 'File';
+    let vaultIds = getVaultFileIds();
+    const strId = String(fileId);
+
+    if (!vaultIds.includes(strId)) {
+        vaultIds.push(strId);
+        saveVaultFileIds(vaultIds);
+    }
+
+    pdToast('success', 'Moved to Vault! 🔒', `"${fileName}" is now secured in Private Vault.`, 3000);
+
+    // Update item row in modal immediately
+    const itemEl = document.getElementById(`vault-import-item-${fileId}`);
+    if (itemEl) {
+        itemEl.style.background = 'rgba(16, 185, 129, 0.1)';
+        itemEl.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        itemEl.innerHTML = `
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+                <i class="fas fa-check-circle" style="color:#10b981;font-size:1.2rem;"></i>
+                <div style="min-width:0;flex:1;">
+                    <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(fileName)}</div>
+                    <div style="font-size:0.75rem;color:#10b981;">Added to Private Vault</div>
+                </div>
+            </div>
+            <span style="font-size:0.8rem;font-weight:600;color:#10b981;padding:4px 10px;background:rgba(16,185,129,0.15);border-radius:6px;">
+                <i class="fas fa-shield-alt"></i> In Vault
+            </span>
+        `;
+        setTimeout(() => {
+            renderVaultImportFileList();
+        }, 1200);
+    }
+
+    // Immediately update background vault view
+    if (activeNav === 'vault') {
+        renderVaultView();
+    }
+}
+window.importFileToVault = importFileToVault;
 
 function resetVaultPinPrompt() {
     showConfirmDialog(
@@ -2025,7 +2243,11 @@ function setView(view) {
         container?.classList.replace('grid-view', 'list-view') || container?.classList.add('list-view');
         listBtn?.classList.add('active'); gridBtn?.classList.remove('active');
     }
-    renderDriveView();
+    if (activeNav === 'vault') {
+        renderVaultView();
+    } else {
+        renderDriveView();
+    }
 }
 
 
@@ -2420,7 +2642,16 @@ async function deleteFile(id) {
                 const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
                 updateStorageUI(localUsed, allFiles.length);
             }
-            displayFiles(allFiles);
+            if (activeNav === 'vault') {
+                let vaultIds = getVaultFileIds();
+                if (vaultIds.includes(String(id))) {
+                    vaultIds = vaultIds.filter(vId => vId !== String(id));
+                    saveVaultFileIds(vaultIds);
+                }
+                renderVaultView();
+            } else {
+                displayFiles(allFiles);
+            }
             loadStorageStats(); // confirm with server
         }
     } else { showToast('Failed to move to trash', 'error'); }

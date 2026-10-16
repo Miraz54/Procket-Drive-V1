@@ -133,6 +133,7 @@
                 </button>
             </div>
             <input type="file" id="fileInput" style="display:none" onchange="uploadFile(this)">
+            <input type="file" id="vaultDirectFileInput" style="display:none" onchange="uploadDirectToVault(this)">
 
             <div class="sidebar-divider"></div>
 
@@ -985,6 +986,31 @@
                 <button class="btn-primary" id="dupProceedBtn"
                     style="flex: 1; border-radius: 12px; margin: 0; background: #f59e0b; border-color: #f59e0b;">Keep
                     Both</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vault Import Modal (Import existing files from Drive to Vault) -->
+    <div id="vaultImportModal" class="modal">
+        <div class="modal-content" style="max-width:680px;width:94%;">
+            <div class="modal-header">
+                <h3><i class="fas fa-shield-halved" style="color:#a78bfa;"></i> Add Files to Private Vault</h3>
+                <button class="modal-close-btn" onclick="closeModal('vaultImportModal')"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding:16px 20px;">
+                <p style="font-size:0.85rem;color:var(--text-2);margin:0 0 14px;">
+                    Select files from your Drive to hide &amp; protect inside your Private Vault without leaving the Vault.
+                </p>
+                <div class="topbar-search" style="margin-bottom:14px;width:100%;">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="vaultImportSearch" placeholder="Search files in Drive…" oninput="filterVaultImportFiles(this.value)">
+                </div>
+                <div id="vaultImportList" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px;">
+                    <!-- Dynamically populated -->
+                </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+                    <button class="btn-primary" onclick="closeModal('vaultImportModal')" style="padding:8px 22px;">Done</button>
+                </div>
             </div>
         </div>
     </div>
