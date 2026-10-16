@@ -755,7 +755,8 @@ function getFileIcon(mimeType, fileId, fileName) {
     if (!mimeType) mimeType = '';
     const ext = (fileName || '').split('.').pop().toLowerCase();
     if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
-        return `<img src="/thumbs/${fileId}.webp" onerror="this.onerror=null;this.src='/api/files/preview/${fileId}?thumb=1'" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;">`;
+        if (!fileId) return `<i class="fas fa-file-image" style="font-size:32px;color:#3b82f6;"></i>`;
+        return `<img src="/api/files/public/preview/${fileId}" onerror="this.onerror=null;this.style.display='none';this.insertAdjacentHTML('afterend','<i class=\\\'fas fa-file-image\\\' style=\\\'font-size:32px;color:#3b82f6;\\\'></i>')" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;">`;
     }
     if (mimeType.includes('pdf') || ext === 'pdf') {
         return `<i class="fas fa-file-pdf" style="font-size:32px;color:#ef4444;"></i>`;
@@ -2545,7 +2546,14 @@ async function loadPublicFilePreview(fileId) {
         if (typeEl) typeEl.textContent = (fileName.split('.').pop() || 'file').toUpperCase();
         if (sizeEl) sizeEl.textContent = formatFileSize(fileSize);
         if (dateEl) dateEl.textContent = file.uploaded_at ? new Date(file.uploaded_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
-        if (iconEl) iconEl.innerHTML = getFileIcon(fileType, fileId, fileName);
+        if (iconEl) {
+            const ext = (fileName || '').split('.').pop().toLowerCase();
+            if (fileType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
+                iconEl.innerHTML = `<img src="${publicPreviewUrl}" alt="" onerror="this.onerror=null;this.style.display='none';this.parentElement.innerHTML='<i class=\\\'fas fa-file-image\\\' style=\\\'color:#3b82f6;\\\'></i>'" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
+            } else {
+                iconEl.innerHTML = getFileIcon(fileType, fileId, fileName);
+            }
+        }
 
         if (dlBtn) {
             dlBtn.href = publicDownloadUrl;

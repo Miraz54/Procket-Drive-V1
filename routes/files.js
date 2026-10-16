@@ -719,9 +719,10 @@ router.delete('/permanent/:id', requireAuth, async (req, res) => {
     }
 });
 
-// Preview (inline) — allows owner OR folder collaborator with fast thumbnail cache
-router.get('/preview/:id', requireAuth, async (req, res) => {
+// Preview (inline) — allows owner, collaborator, or public link access
+router.get('/preview/:id', async (req, res) => {
     const fileId = req.params.id;
+    const userId = (req.session && req.session.userId) || verifyToken(req);
     const isThumb = (req.query.thumb === '1' || req.query.thumb === 'true');
     // If a cache-buster timestamp is provided (?t=...), bypass caches completely
     const cacheBust = !!req.query.t;
@@ -751,13 +752,13 @@ router.get('/preview/:id', requireAuth, async (req, res) => {
         .maybeSingle();
     if (error || !file) return res.status(404).json({ error: 'File not found' });
 
-    // Check: must be file owner OR have folder access
-    const isOwner = String(file.user_id) === String(req.session.userId);
-    if (!isOwner && file.folder_id) {
-        const hasAccess = await checkFolderAccess(req.session.userId, file.folder_id);
-        if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
-    } else if (!isOwner) {
-        return res.status(403).json({ error: 'Access denied' });
+    // If authenticated user, verify permissions if in folder
+    if (userId) {
+        const isOwner = String(file.user_id) === String(userId);
+        if (!isOwner && file.folder_id) {
+            const hasAccess = await checkFolderAccess(userId, file.folder_id);
+            if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+        }
     }
 
     const storagePath = file.file_path.split('/userfiles/')[1];
