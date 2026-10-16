@@ -2,9 +2,13 @@ const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const { verifyToken } = require('../lib/auth');
 const router = express.Router();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'ProcketDrive2024!SecretKey#xyz789';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
@@ -907,6 +911,35 @@ router.get('/storage-stats', requireAuth, async (req, res) => {
 });
 
 // ======================== SHARE FILE ========================
+// Helper to verify cryptographically protected share links & passwords
+function verifyShareSecurity(req) {
+    const { st, pwd } = req.query;
+    const headerPwd = req.headers['x-share-password'];
+    const enteredPassword = pwd || headerPwd;
+
+    if (!st) return { allowed: true, requiresPassword: false };
+
+    try {
+        const payload = jwt.verify(st, JWT_SECRET);
+        if (payload.ph) {
+            if (!enteredPassword) {
+                return { allowed: false, requiresPassword: true, error: 'Password required' };
+            }
+            const hash = crypto.createHash('sha256').update(String(enteredPassword).trim()).digest('hex');
+            if (hash !== payload.ph) {
+                return { allowed: false, requiresPassword: true, error: 'Incorrect password' };
+            }
+        }
+        return { allowed: true, requiresPassword: false, payload };
+    } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+            return { allowed: false, expired: true, error: 'This share link has expired and self-destructed.' };
+        }
+        return { allowed: false, invalid: true, error: 'Invalid or corrupted share link' };
+    }
+}
+
+// ======================== SHARE FILE & TOKEN GENERATION ========================
 router.get('/share/:id', requireAuth, async (req, res) => {
     try {
         const { data: file, error } = await supabase
@@ -927,16 +960,78 @@ router.get('/share/:id', requireAuth, async (req, res) => {
     }
 });
 
+// Generate cryptographically protected share link with password & self-destruct expiration
+router.post('/share-token/:id', requireAuth, async (req, res) => {
+    try {
+        const userId = req.session?.userId || req.userId || verifyToken(req);
+        const { password, expiry } = req.body || {};
+
+        const { data: file, error } = await supabaseAdmin
+            .from('files')
+            .select('id, original_name')
+            .eq('id', req.params.id)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (error || !file) return res.status(404).json({ error: 'File not found' });
+
+        let passwordHash = null;
+        if (password && String(password).trim()) {
+            passwordHash = crypto.createHash('sha256').update(String(password).trim()).digest('hex');
+        }
+
+        const payload = {
+            fid: file.id,
+            ph: passwordHash
+        };
+
+        const jwtOptions = {};
+        if (expiry && expiry !== 'never') {
+            jwtOptions.expiresIn = expiry; // e.g. '1h', '24h', '7d', '30d'
+        }
+
+        const token = jwt.sign(payload, JWT_SECRET, jwtOptions);
+        res.json({
+            token,
+            hasPassword: !!passwordHash,
+            expiry: expiry || 'never'
+        });
+    } catch (err) {
+        console.error('[share-token] error:', err);
+        res.status(500).json({ error: 'Failed to generate protected token' });
+    }
+});
+
 // ======================== PUBLIC VIEW (no auth) ========================
 router.get('/public/:id', async (req, res) => {
     try {
+        const sec = verifyShareSecurity(req);
+        if (sec.expired) {
+            return res.status(410).json({ error: sec.error });
+        }
+        if (sec.invalid) {
+            return res.status(400).json({ error: sec.error });
+        }
+
         const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('id, file_path, original_name, mime_type, file_size, uploaded_at')
             .eq('id', req.params.id)
             .eq('is_deleted', 0)
             .maybeSingle();
+
         if (error || !file) return res.status(404).json({ error: 'File not found or deleted' });
+
+        if (sec.requiresPassword) {
+            return res.json({
+                id: file.id,
+                name: file.original_name,
+                type: file.mime_type,
+                size: Number(file.file_size) || 0,
+                requiresPassword: true
+            });
+        }
+
         res.json({
             id: file.id,
             url: file.file_path,
@@ -951,9 +1046,13 @@ router.get('/public/:id', async (req, res) => {
 });
 
 // ======================== PUBLIC INLINE PREVIEW (no auth) ========================
-// PUBLIC INLINE PREVIEW (no auth required) — direct streaming
 router.get('/public/preview/:id', async (req, res) => {
     try {
+        const sec = verifyShareSecurity(req);
+        if (!sec.allowed) {
+            return res.status(sec.expired ? 410 : 401).send(sec.error);
+        }
+
         const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('file_path, original_name, mime_type')
@@ -982,6 +1081,11 @@ router.get('/public/preview/:id', async (req, res) => {
 // PUBLIC DOWNLOAD (no auth required) — direct streaming
 router.get('/public/download/:id', async (req, res) => {
     try {
+        const sec = verifyShareSecurity(req);
+        if (!sec.allowed) {
+            return res.status(sec.expired ? 410 : 401).json({ error: sec.error });
+        }
+
         const { data: file, error } = await supabaseAdmin
             .from('files')
             .select('file_path, original_name, mime_type')

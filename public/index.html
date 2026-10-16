@@ -13,6 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/qrcode.min.js"></script>
 </head>
 
 <body class="light-mode">
@@ -320,6 +321,22 @@
                             class="fas fa-home"></i> Back to Pocket Drive</a>
                 </div>
 
+                <!-- Password Protection Screen for Shared File / Link -->
+                <div id="publicPasswordBox" class="public-password-box" style="display:none;">
+                    <div class="public-lock-badge">
+                        <i class="fas fa-lock"></i>
+                    </div>
+                    <h2 style="font-size:1.35rem;font-weight:700;margin:14px 0 6px;color:var(--text-1);">Protected File</h2>
+                    <p style="color:var(--text-2);font-size:0.9rem;margin:0 auto 20px;max-width:380px;">This share link is password-protected. Enter the password to unlock this file.</p>
+                    <div style="display:flex;gap:8px;max-width:360px;width:100%;margin:0 auto 10px;">
+                        <input type="password" id="pubPasswordInput" class="share-link-input" placeholder="Enter password…" style="flex:1;font-size:0.95rem;text-align:center;" onkeydown="if(event.key==='Enter') submitPubPassword()">
+                        <button class="btn-primary" onclick="submitPubPassword()" style="margin:0;padding:10px 18px;border-radius:10px;white-space:nowrap;">
+                            <i class="fas fa-unlock"></i> Unlock
+                        </button>
+                    </div>
+                    <div id="pubPasswordError" style="color:#ef4444;font-size:0.85rem;display:none;margin-top:8px;"></div>
+                </div>
+
                 <!-- Shared File Preview -->
                 <div id="publicContent" class="public-content" style="display:none;">
                     <div class="public-file-header">
@@ -448,27 +465,90 @@
                         <div class="share-file-meta" id="shareFileMeta">–</div>
                     </div>
                 </div>
-                <div class="share-notice">
-                    <i class="fas fa-globe"></i>
-                    <span>Anyone with the link can view this file</span>
-                </div>
-                <div id="shareImagePreview"
-                    style="display:none; margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
-                </div>
-                <div class="share-link-box">
-                    <input type="text" id="shareLinkInput" class="share-link-input" readonly>
-                    <button class="share-copy-btn" onclick="copyShareLink()" id="shareCopyBtn">
-                        <i class="fas fa-copy"></i> Copy
+                <!-- Tabs: Link / QR Code -->
+                <div class="share-nav-tabs">
+                    <button id="tabShareLink" class="share-tab-btn active" onclick="switchShareTab('link')">
+                        <i class="fas fa-link"></i> Link
+                    </button>
+                    <button id="tabShareQR" class="share-tab-btn" onclick="switchShareTab('qr')">
+                        <i class="fas fa-qrcode"></i> Mobile QR Code
                     </button>
                 </div>
-                <div class="share-actions">
-                    <a id="shareOpenLink" href="#" target="_blank" rel="noopener"
-                        class="share-action-btn share-action-open">
-                        <i class="fas fa-external-link-alt"></i> Open Link
-                    </a>
-                    <a id="shareDownloadLink" href="#" download class="share-action-btn share-action-download">
-                        <i class="fas fa-download"></i> Download
-                    </a>
+
+                <!-- Tab 1: Link View -->
+                <div id="shareLinkTabView" class="share-tab-content">
+                    <div class="share-notice">
+                        <i class="fas fa-globe"></i>
+                        <span>Anyone with this link can access according to security settings</span>
+                    </div>
+                    <div id="shareImagePreview"
+                        style="display:none; margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                    </div>
+                    <div class="share-link-box">
+                        <input type="text" id="shareLinkInput" class="share-link-input" readonly>
+                        <button class="share-copy-btn" onclick="copyShareLink()" id="shareCopyBtn">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="share-actions">
+                        <a id="shareOpenLink" href="#" target="_blank" rel="noopener"
+                            class="share-action-btn share-action-open">
+                            <i class="fas fa-external-link-alt"></i> Open Link
+                        </a>
+                        <a id="shareDownloadLink" href="#" download class="share-action-btn share-action-download">
+                            <i class="fas fa-download"></i> Direct Download
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Mobile QR Code View -->
+                <div id="shareQRTabView" class="share-tab-content" style="display:none;">
+                    <div class="share-qr-card">
+                        <div id="shareQRCodeBox" class="share-qr-canvas-box"></div>
+                        <p class="share-qr-hint"><i class="fas fa-camera"></i> Scan with your mobile phone camera to open / download directly</p>
+                        <button class="btn-secondary-action share-qr-dl-btn" onclick="downloadShareQR()">
+                            <i class="fas fa-download"></i> Save QR Image
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Security & Self-Destruct Protection Box -->
+                <div class="share-security-section">
+                    <div class="share-security-header" onclick="toggleShareSecuritySettings()">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <i class="fas fa-shield-alt" style="color:var(--accent);"></i>
+                            <span style="font-weight:600;font-size:0.88rem;">Protection &amp; Expiration (Self-Destruct)</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span id="shareSecuritySummaryBadge" class="share-sec-badge" style="display:none;"></span>
+                            <i class="fas fa-chevron-down" id="shareSecChevron" style="transition:transform 0.2s;"></i>
+                        </div>
+                    </div>
+                    <div id="shareSecurityBody" style="display:none;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;" class="share-sec-grid">
+                            <div>
+                                <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;color:var(--text-1);">
+                                    <i class="fas fa-lock" style="color:#f59e0b;"></i> Password Protection:
+                                </label>
+                                <input type="text" id="shareSecPassword" class="share-link-input" placeholder="Set password (or empty for none)" style="width:100%;font-size:0.85rem;" oninput="onShareSecurityChange()">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:6px;color:var(--text-1);">
+                                    <i class="fas fa-hourglass-half" style="color:#6366f1;"></i> Self-Destruct / Expiration:
+                                </label>
+                                <select id="shareSecExpiry" class="share-link-input" style="width:100%;font-size:0.85rem;cursor:pointer;" onchange="onShareSecurityChange()">
+                                    <option value="never" selected>♾️ Unlimited (Never Expires)</option>
+                                    <option value="1h">⏱️ 1 Hour</option>
+                                    <option value="24h">⏱️ 24 Hours (1 Day)</option>
+                                    <option value="7d">⏱️ 7 Days</option>
+                                    <option value="30d">⏱️ 30 Days</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p style="font-size:0.75rem;color:var(--text-3);margin-top:8px;margin-bottom:0;">
+                            <i class="fas fa-info-circle"></i> Password &amp; self-destruct timers are cryptographically signed into the link and QR code.
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Email Sharing -->

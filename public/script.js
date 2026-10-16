@@ -1442,23 +1442,189 @@ function setView(view) {
 }
 
 
-// File sharing
+// File sharing with QR Code, Password Protection & Self-Destruct Expiration
+let _currentShareId = null;
+let _shareQRCodeInstance = null;
+let _shareSecurityTimeout = null;
+
+function renderShareQRCode(url) {
+    const qrContainer = document.getElementById('shareQRCodeBox');
+    if (!qrContainer) return;
+    qrContainer.innerHTML = '';
+    if (!url) return;
+
+    if (typeof QRCode !== 'undefined') {
+        _shareQRCodeInstance = new QRCode(qrContainer, {
+            text: url,
+            width: 190,
+            height: 190,
+            colorDark: '#0f172a',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+        });
+    } else {
+        qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=${encodeURIComponent(url)}" alt="QR Code" style="width:190px;height:190px;border-radius:12px;">`;
+    }
+}
+
+function switchShareTab(tab) {
+    const tabLinkBtn = document.getElementById('tabShareLink');
+    const tabQRBtn = document.getElementById('tabShareQR');
+    const linkView = document.getElementById('shareLinkTabView');
+    const qrView = document.getElementById('shareQRTabView');
+    if (!tabLinkBtn || !tabQRBtn) return;
+
+    if (tab === 'qr') {
+        tabLinkBtn.classList.remove('active');
+        tabQRBtn.classList.add('active');
+        if (linkView) linkView.style.display = 'none';
+        if (qrView) qrView.style.display = 'block';
+        const currentUrl = document.getElementById('shareLinkInput')?.value || '';
+        renderShareQRCode(currentUrl);
+    } else {
+        tabQRBtn.classList.remove('active');
+        tabLinkBtn.classList.add('active');
+        if (qrView) qrView.style.display = 'none';
+        if (linkView) linkView.style.display = 'block';
+    }
+}
+
+function downloadShareQR() {
+    const qrContainer = document.getElementById('shareQRCodeBox');
+    if (!qrContainer) return;
+
+    const canvas = qrContainer.querySelector('canvas');
+    const img = qrContainer.querySelector('img');
+    let dataUrl = '';
+    if (canvas) {
+        dataUrl = canvas.toDataURL('image/png');
+    } else if (img && img.src) {
+        dataUrl = img.src;
+    }
+    if (!dataUrl) {
+        showToast('QR Code not ready yet', 'warning');
+        return;
+    }
+
+    const fileName = (document.getElementById('shareFileName')?.textContent || 'procket-drive-share').trim().replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const link = document.createElement('a');
+    link.download = `${fileName}-qr.png`;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('📸 QR Code saved to downloads!', 'success');
+}
+
+function toggleShareSecuritySettings() {
+    const body = document.getElementById('shareSecurityBody');
+    const chevron = document.getElementById('shareSecChevron');
+    if (!body) return;
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    if (chevron) {
+        chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+}
+
+async function onShareSecurityChange() {
+    if (!_currentShareId) return;
+    clearTimeout(_shareSecurityTimeout);
+    _shareSecurityTimeout = setTimeout(async () => {
+        const pwd = document.getElementById('shareSecPassword')?.value || '';
+        const expiry = document.getElementById('shareSecExpiry')?.value || 'never';
+        const badge = document.getElementById('shareSecuritySummaryBadge');
+
+        // Update summary badge
+        if (badge) {
+            const badges = [];
+            if (pwd.trim()) badges.push('<i class="fas fa-lock"></i> Protected');
+            if (expiry !== 'never') badges.push(`<i class="fas fa-clock"></i> ${expiry}`);
+            if (badges.length > 0) {
+                badge.innerHTML = badges.join(' • ');
+                badge.style.display = 'inline-flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        try {
+            let token = '';
+            if (pwd.trim() || expiry !== 'never') {
+                const res = await fetch(`/api/files/share-token/${_currentShareId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ id: _currentShareId, password: pwd.trim(), expiry })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    token = data.token;
+                }
+            }
+
+            let finalUrl = `${location.origin}/share/file/${_currentShareId}`;
+            if (token) {
+                finalUrl += `?st=${encodeURIComponent(token)}`;
+            }
+
+            const linkInput = document.getElementById('shareLinkInput');
+            if (linkInput) linkInput.value = finalUrl;
+
+            const openLink = document.getElementById('shareOpenLink');
+            if (openLink) openLink.href = finalUrl;
+
+            const downloadLink = document.getElementById('shareDownloadLink');
+            if (downloadLink) {
+                let dlUrl = `${location.origin}/api/files/public/download/${_currentShareId}`;
+                if (token) dlUrl += `?st=${encodeURIComponent(token)}`;
+                downloadLink.href = dlUrl;
+            }
+
+            // Re-render QR code
+            renderShareQRCode(finalUrl);
+        } catch (err) {
+            console.error('Failed to update share security:', err);
+        }
+    }, 300);
+}
+
+// Global exposure for inline HTML events
+window.switchShareTab = switchShareTab;
+window.downloadShareQR = downloadShareQR;
+window.toggleShareSecuritySettings = toggleShareSecuritySettings;
+window.onShareSecurityChange = onShareSecurityChange;
+
 async function shareFile(id) {
+    _currentShareId = id;
     const file = allFiles.find(f => String(f.id) === String(id));
     const name = file ? file.name : 'File';
     const type = file ? file.type : '';
     const size = file ? file.size : 0;
+
+    // Reset Security Controls
+    const pwdInput = document.getElementById('shareSecPassword');
+    const expirySelect = document.getElementById('shareSecExpiry');
+    const secBody = document.getElementById('shareSecurityBody');
+    const secChevron = document.getElementById('shareSecChevron');
+    const badge = document.getElementById('shareSecuritySummaryBadge');
+
+    if (pwdInput) pwdInput.value = '';
+    if (expirySelect) expirySelect.value = 'never';
+    if (secBody) secBody.style.display = 'none';
+    if (secChevron) secChevron.style.transform = 'rotate(0deg)';
+    if (badge) badge.style.display = 'none';
+
+    // Switch to Link tab by default
+    switchShareTab('link');
+
     try {
         const res = await fetch(`/api/files/share/${id}`);
         const data = await res.json();
         if (!res.ok) { showToast('Could not get share link', 'error'); return; }
 
-        // The public preview link — opens interactive preview page
         const publicShareUrl = `${location.origin}/share/file/${id}`;
-        // The public download URL (for direct download action)
         const publicDownloadUrl = `${location.origin}/api/files/public/download/${id}`;
-        // Direct Supabase storage URL
-        const publicViewUrl = data.url;
 
         // Populate modal
         document.getElementById('shareFileName').textContent = name;
@@ -1485,6 +1651,9 @@ async function shareFile(id) {
         const downloadLink = document.getElementById('shareDownloadLink');
         if (openLink) { openLink.href = publicShareUrl; openLink.target = '_blank'; }
         if (downloadLink) { downloadLink.href = publicDownloadUrl; downloadLink.removeAttribute('target'); }
+
+        // Render QR Code
+        renderShareQRCode(publicShareUrl);
 
         // Reset copy button
         const copyBtn = document.getElementById('shareCopyBtn');
@@ -2545,24 +2714,58 @@ function showPublicPreviewLayout() {
     if (pubPage) pubPage.style.display = 'flex';
 }
 
-async function loadPublicFilePreview(fileId) {
+let _currentPublicFileId = null;
+let _currentPublicEnteredPassword = '';
+
+async function loadPublicFilePreview(fileId, enteredPassword) {
     hideInitSpinner();
     const loading = document.getElementById('publicLoading');
     const errorBox = document.getElementById('publicError');
     const contentBox = document.getElementById('publicContent');
     const folderBox = document.getElementById('publicFolderContent');
+    const passwordBox = document.getElementById('publicPasswordBox');
+    const passwordError = document.getElementById('pubPasswordError');
+
+    _currentPublicFileId = fileId;
+    const urlParams = new URLSearchParams(window.location.search);
+    const st = urlParams.get('st') || '';
+
+    if (enteredPassword !== undefined) {
+        _currentPublicEnteredPassword = enteredPassword;
+    }
 
     if (loading) loading.style.display = 'block';
     if (errorBox) errorBox.style.display = 'none';
     if (contentBox) contentBox.style.display = 'none';
     if (folderBox) folderBox.style.display = 'none';
+    if (passwordBox && !enteredPassword) passwordBox.style.display = 'none';
+    if (passwordError) passwordError.style.display = 'none';
 
     try {
-        const res = await fetch(`/api/files/public/${fileId}`);
+        let apiUrl = `/api/files/public/${fileId}`;
+        const params = new URLSearchParams();
+        if (st) params.set('st', st);
+        if (_currentPublicEnteredPassword) params.set('pwd', _currentPublicEnteredPassword);
+        const qs = params.toString();
+        if (qs) apiUrl += `?${qs}`;
+
+        const res = await fetch(apiUrl);
         const file = await res.json();
+
+        if (res.status === 410) {
+            if (loading) loading.style.display = 'none';
+            if (passwordBox) passwordBox.style.display = 'none';
+            if (errorBox) {
+                errorBox.style.display = 'block';
+                const msg = document.getElementById('publicErrorMsg');
+                if (msg) msg.textContent = '⏱️ This share link has expired and self-destructed.';
+            }
+            return;
+        }
 
         if (!res.ok || !file || file.error) {
             if (loading) loading.style.display = 'none';
+            if (passwordBox) passwordBox.style.display = 'none';
             if (errorBox) {
                 errorBox.style.display = 'block';
                 const msg = document.getElementById('publicErrorMsg');
@@ -2570,6 +2773,28 @@ async function loadPublicFilePreview(fileId) {
             }
             return;
         }
+
+        // If password is required
+        if (file.requiresPassword) {
+            if (loading) loading.style.display = 'none';
+            if (contentBox) contentBox.style.display = 'none';
+            if (passwordBox) passwordBox.style.display = 'block';
+            if (enteredPassword) {
+                if (passwordError) {
+                    passwordError.textContent = '❌ Incorrect password. Please try again.';
+                    passwordError.style.display = 'block';
+                }
+            }
+            const pwdInput = document.getElementById('pubPasswordInput');
+            if (pwdInput) {
+                pwdInput.focus();
+                pwdInput.select();
+            }
+            return;
+        }
+
+        // Password unlocked or no password needed
+        if (passwordBox) passwordBox.style.display = 'none';
 
         const iconEl = document.getElementById('pubFileIcon');
         const nameEl = document.getElementById('pubFileName');
@@ -2581,8 +2806,17 @@ async function loadPublicFilePreview(fileId) {
         const fileName = file.name || 'Shared File';
         const fileType = file.type || 'application/octet-stream';
         const fileSize = file.size || 0;
-        const publicPreviewUrl = `/api/files/public/preview/${fileId}`;
-        const publicDownloadUrl = `/api/files/public/download/${fileId}`;
+
+        let publicPreviewUrl = `/api/files/public/preview/${fileId}`;
+        let publicDownloadUrl = `/api/files/public/download/${fileId}`;
+        const queryParams = new URLSearchParams();
+        if (st) queryParams.set('st', st);
+        if (_currentPublicEnteredPassword) queryParams.set('pwd', _currentPublicEnteredPassword);
+        const queryStr = queryParams.toString();
+        if (queryStr) {
+            publicPreviewUrl += `?${queryStr}`;
+            publicDownloadUrl += `?${queryStr}`;
+        }
 
         if (nameEl) nameEl.textContent = fileName;
         if (typeEl) typeEl.textContent = (fileName.split('.').pop() || 'file').toUpperCase();
@@ -2601,7 +2835,6 @@ async function loadPublicFilePreview(fileId) {
             dlBtn.href = publicDownloadUrl;
             dlBtn.setAttribute('download', fileName);
             dlBtn.onclick = function (e) {
-                // Guaranteed immediate download trigger for incognito & all mobile/desktop browsers
                 window.location.href = publicDownloadUrl;
             };
         }
@@ -2616,8 +2849,8 @@ async function loadPublicFilePreview(fileId) {
             };
         }
 
-        // Render Media Preview
-        renderPublicMediaPreview(fileId, fileName, fileType, file.url || publicPreviewUrl);
+        // Render Media Preview using authenticated/secured stream URL
+        renderPublicMediaPreview(fileId, fileName, fileType, file.url || publicPreviewUrl, publicPreviewUrl);
 
         if (loading) loading.style.display = 'none';
         if (contentBox) contentBox.style.display = 'block';
@@ -2629,16 +2862,33 @@ async function loadPublicFilePreview(fileId) {
     }
 }
 
-function renderPublicMediaPreview(fileId, fileName, mimeType, directUrl) {
+async function submitPubPassword() {
+    const pwdInput = document.getElementById('pubPasswordInput');
+    const pwd = pwdInput ? pwdInput.value.trim() : '';
+    const errEl = document.getElementById('pubPasswordError');
+    if (!pwd) {
+        if (errEl) {
+            errEl.textContent = 'Please enter the password.';
+            errEl.style.display = 'block';
+        }
+        return;
+    }
+    if (_currentPublicFileId) {
+        await loadPublicFilePreview(_currentPublicFileId, pwd);
+    }
+}
+window.submitPubPassword = submitPubPassword;
+
+function renderPublicMediaPreview(fileId, fileName, mimeType, directUrl, previewStreamUrl) {
     const mediaBox = document.getElementById('pubMediaBox');
     if (!mediaBox) return;
     mediaBox.innerHTML = '';
 
     const ext = fileName.split('.').pop().toLowerCase();
-    const publicPreviewUrl = `/api/files/public/preview/${fileId}`;
+    const publicPreviewUrl = previewStreamUrl || `/api/files/public/preview/${fileId}`;
 
     if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
-        mediaBox.innerHTML = `<img src="${publicPreviewUrl}" alt="${escapeHtml(fileName)}" onclick="window.open('${directUrl}','_blank')" title="Click to view full size">`;
+        mediaBox.innerHTML = `<img src="${publicPreviewUrl}" alt="${escapeHtml(fileName)}" onclick="window.open('${publicPreviewUrl}','_blank')" title="Click to view full size">`;
     } else if (mimeType.startsWith('video/') || ['mp4', 'webm', 'ogg', 'mov', 'mkv'].includes(ext)) {
         mediaBox.innerHTML = `<video controls playsinline preload="metadata" src="${publicPreviewUrl}"></video>`;
     } else if (mimeType.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac'].includes(ext)) {

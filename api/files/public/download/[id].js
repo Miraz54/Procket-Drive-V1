@@ -1,16 +1,20 @@
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const supabase = require('../../../../lib/supabase');
 
 const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : supabase;
 
+const JWT_SECRET = process.env.JWT_SECRET || 'ProcketDrive2024!SecretKey#xyz789';
+
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Share-Password');
 }
 
 // GET /api/files/public/download/[id]
@@ -20,7 +24,29 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { id } = req.query;
+    const { id, st, pwd } = req.query;
+    const headerPwd = req.headers['x-share-password'];
+    const enteredPassword = pwd || headerPwd;
+
+    if (st) {
+        try {
+            const payload = jwt.verify(st, JWT_SECRET);
+            if (payload.ph) {
+                if (!enteredPassword) {
+                    return res.status(401).json({ error: 'Password required' });
+                }
+                const hash = crypto.createHash('sha256').update(String(enteredPassword).trim()).digest('hex');
+                if (hash !== payload.ph) {
+                    return res.status(401).json({ error: 'Incorrect password' });
+                }
+            }
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') {
+                return res.status(410).json({ error: 'This share link has expired and self-destructed.' });
+            }
+            return res.status(400).json({ error: 'Invalid or corrupted share link' });
+        }
+    }
 
     try {
         const { data: file, error } = await supabaseAdmin

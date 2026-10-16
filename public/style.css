@@ -3821,3 +3821,153 @@ body {
     text-align: center;
     flex-shrink: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SHARE MODAL ENHANCEMENTS: TABS, QR CODE & PROTECTION SETTINGS
+   ══════════════════════════════════════════════════════════════════════════ */
+.share-nav-tabs {
+    display: flex;
+    gap: 8px;
+    background: var(--bg-input, rgba(255, 255, 255, 0.04));
+    padding: 4px;
+    border-radius: 12px;
+    margin: 14px 0 16px;
+    border: 1px solid var(--border);
+}
+
+.share-tab-btn {
+    flex: 1;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 0.86rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: inherit;
+}
+
+.share-tab-btn:hover {
+    color: var(--text-1);
+}
+
+.share-tab-btn.active {
+    background: var(--bg-card, #fff);
+    color: var(--accent, #6366f1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* QR Code Card */
+.share-qr-card {
+    text-align: center;
+    padding: 16px;
+    background: var(--bg-input, rgba(255, 255, 255, 0.03));
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+.share-qr-canvas-box {
+    display: inline-flex;
+    padding: 14px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    margin: 6px auto 14px;
+    align-items: center;
+    justify-content: center;
+    min-width: 180px;
+    min-height: 180px;
+}
+
+.share-qr-canvas-box img,
+.share-qr-canvas-box canvas {
+    display: block;
+    max-width: 180px;
+    height: auto;
+    border-radius: 6px;
+}
+
+.share-qr-hint {
+    font-size: 0.82rem;
+    color: var(--text-2);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.share-qr-dl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 18px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+/* Protection & Self-Destruct Section */
+.share-security-section {
+    margin-top: 16px;
+    background: var(--bg-input, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    transition: border-color 0.2s;
+}
+
+.share-security-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+}
+
+.share-sec-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--accent, #6366f1);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.share-security-section:hover {
+    border-color: var(--border-hover);
+}
+
+/* Public Lock Screen */
+.public-password-box {
+    text-align: center;
+    padding: 40px 24px;
+    background: var(--bg-card);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    animation: fadeIn 0.3s ease;
+}
+
+.public-lock-badge {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+    font-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
