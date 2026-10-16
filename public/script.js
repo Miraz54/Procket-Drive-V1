@@ -123,6 +123,8 @@ function hideInitSpinner() {
         setTimeout(() => { try { spinner.remove(); } catch (e) { } }, 300);
     }
 }
+// Safety watchdog: ensure spinner is never stuck on screen under any slow network or exception
+setTimeout(hideInitSpinner, 1500);
 
 async function checkAuth() {
     try {
@@ -3143,7 +3145,6 @@ function renderAIFilePicker(query) {
             (f.type || '').startsWith('text/') ||
             /\.(txt|md|csv|json|log|xml|html)$/i.test(f.name || '')
         );
-    }
     }
 
     if (query) {
