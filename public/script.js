@@ -419,6 +419,7 @@ function stopStoragePolling() {
 // File uploads & duplicate warning state
 let _pendingUploadFile = null;
 let _pendingUploadInput = null;
+let _pendingUploadIsVault = false;
 
 function setupDuplicateWarningHandlers() {
     const cancelBtn = document.getElementById('dupCancelBtn');
@@ -430,6 +431,7 @@ function setupDuplicateWarningHandlers() {
             showToast('Upload cancelled for duplicate file.', 'info');
             _pendingUploadFile = null;
             _pendingUploadInput = null;
+            _pendingUploadIsVault = false;
         };
     }
     if (proceedBtn) {
@@ -437,10 +439,11 @@ function setupDuplicateWarningHandlers() {
             closeModal('duplicateWarningModal');
             if (_pendingUploadFile && _pendingUploadInput) {
                 showToast(`⚠️ Uploading duplicate copy of "${_pendingUploadFile.name}"...`, 'warning');
-                proceedUpload(_pendingUploadFile, _pendingUploadInput);
+                proceedUpload(_pendingUploadFile, _pendingUploadInput, _pendingUploadIsVault);
             }
             _pendingUploadFile = null;
             _pendingUploadInput = null;
+            _pendingUploadIsVault = false;
         };
     }
 }
@@ -723,6 +726,34 @@ async function uploadDirectToVault(input) {
         showToast(`⚠️ Storage full! This upload would exceed your 15GB storage limit.`, 'error', 6000);
         input.value = '';
         return;
+    }
+
+    // Duplicate check for Private Vault!
+    const vaultIds = getVaultFileIds();
+    const vaultFiles = allFiles.filter(f => vaultIds.includes(String(f.id)));
+    const isDuplicate = vaultFiles.some(f =>
+        f.name && f.name.trim().toLowerCase() === file.name.trim().toLowerCase()
+    );
+
+    if (isDuplicate) {
+        _pendingUploadFile = file;
+        _pendingUploadInput = input;
+        _pendingUploadIsVault = true;
+        setupDuplicateWarningHandlers();
+        const dupModal = document.getElementById('duplicateWarningModal');
+        const dupText = document.getElementById('dupWarningText');
+        if (dupModal && dupText) {
+            dupText.innerHTML = `<strong>"${escapeHtml(file.name)}"</strong> already exists in your Private Vault.<br><br>Do you want to upload another copy anyway?`;
+            openModal('duplicateWarningModal');
+            return;
+        } else {
+            const proceed = confirm(`⚠️ Duplicate File Warning:\n\n"${file.name}" already exists in your Private Vault!\n\nDo you want to upload another copy anyway?`);
+            if (!proceed) {
+                showToast(`Upload cancelled: "${file.name}" already exists in Vault.`, 'info');
+                input.value = '';
+                return;
+            }
+        }
     }
 
     proceedUpload(file, input, true);
@@ -1886,20 +1917,20 @@ function renderVaultImportFileList() {
 
     listEl.innerHTML = availableFiles.map(f => `
         <div class="vault-import-item" id="vault-import-item-${f.id}">
-            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
-                <div style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--bg-card);flex-shrink:0;">
+            <div class="vault-import-info">
+                <div class="vault-import-icon">
                     ${getFileIcon(f.type, f.id, f.name)}
                 </div>
-                <div style="min-width:0;flex:1;">
-                    <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(f.name)}">
+                <div class="vault-import-text">
+                    <div class="vault-import-name" title="${escapeHtml(f.name)}">
                         ${escapeHtml(f.name)}
                     </div>
-                    <div style="font-size:0.75rem;color:var(--text-3);">
+                    <div class="vault-import-meta">
                         ${formatFileSize(f.size)} &bull; ${formatDateTime(f.uploaded_at)}
                     </div>
                 </div>
             </div>
-            <button class="btn-primary" onclick="importFileToVault('${f.id}')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;padding:6px 14px;font-size:0.8rem;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border-radius:8px;flex-shrink:0;cursor:pointer;">
+            <button class="vault-import-btn" onclick="importFileToVault('${f.id}')">
                 <i class="fas fa-plus"></i> Move to Vault
             </button>
         </div>
@@ -1911,6 +1942,20 @@ function importFileToVault(fileId) {
     const fileName = file ? file.name : 'File';
     let vaultIds = getVaultFileIds();
     const strId = String(fileId);
+
+    // Duplicate check: check if file with same name is already in Vault!
+    const vaultFiles = allFiles.filter(f => vaultIds.includes(String(f.id)));
+    const duplicateInVault = vaultFiles.find(f =>
+        String(f.id) !== strId && f.name && f.name.trim().toLowerCase() === fileName.trim().toLowerCase()
+    );
+
+    if (duplicateInVault) {
+        const proceed = confirm(`⚠️ Duplicate File Warning:\n\nA file named "${fileName}" already exists in your Private Vault!\n\nDo you want to add this file to Vault anyway?`);
+        if (!proceed) {
+            showToast(`Cancelled adding "${fileName}" to Vault.`, 'info');
+            return;
+        }
+    }
 
     if (!vaultIds.includes(strId)) {
         vaultIds.push(strId);
@@ -1925,14 +1970,14 @@ function importFileToVault(fileId) {
         itemEl.style.background = 'rgba(16, 185, 129, 0.1)';
         itemEl.style.borderColor = 'rgba(16, 185, 129, 0.3)';
         itemEl.innerHTML = `
-            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
-                <i class="fas fa-check-circle" style="color:#10b981;font-size:1.2rem;"></i>
-                <div style="min-width:0;flex:1;">
-                    <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(fileName)}</div>
-                    <div style="font-size:0.75rem;color:#10b981;">Added to Private Vault</div>
+            <div class="vault-import-info">
+                <i class="fas fa-check-circle" style="color:#10b981;font-size:1.3rem;flex-shrink:0;"></i>
+                <div class="vault-import-text">
+                    <div class="vault-import-name">${escapeHtml(fileName)}</div>
+                    <div class="vault-import-meta" style="color:#10b981;font-weight:600;">Added to Private Vault</div>
                 </div>
             </div>
-            <span style="font-size:0.8rem;font-weight:600;color:#10b981;padding:4px 10px;background:rgba(16,185,129,0.15);border-radius:6px;">
+            <span style="font-size:0.8rem;font-weight:600;color:#10b981;padding:5px 12px;background:rgba(16,185,129,0.15);border-radius:8px;white-space:nowrap;flex-shrink:0;">
                 <i class="fas fa-shield-alt"></i> In Vault
             </span>
         `;
@@ -3434,6 +3479,7 @@ async function showSharedFolderLoggedIn(token, userData) {
 
         // Set global sharedFolderId for uploads
         if (data.folder && data.folder.id) sharedFolderId = data.folder.id;
+        if (Array.isArray(data.files)) allFiles = data.files;
 
         // Check if already accepted (use backend value as source of truth)
         const alreadyAccepted = data.alreadyAccepted === true;
@@ -3796,6 +3842,8 @@ async function loadPublicFolderPreview(token) {
             }
         }
         if (countEl) countEl.textContent = `${data.files ? data.files.length : 0} file(s)`;
+        if (data.folder && data.folder.id) sharedFolderId = data.folder.id;
+        if (Array.isArray(data.files)) allFiles = data.files;
 
         // Show upload section ONLY if user has Editor permission
         if (data.userRole === 'editor') {
