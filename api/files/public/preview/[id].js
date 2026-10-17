@@ -28,35 +28,48 @@ module.exports = async function handler(req, res) {
     const headerPwd = req.headers['x-share-password'];
     const enteredPassword = pwd || headerPwd;
 
-    if (st) {
-        try {
-            const payload = jwt.verify(st, JWT_SECRET);
-            if (payload.ph) {
-                if (!enteredPassword) {
-                    return res.status(401).json({ error: 'Password required' });
-                }
-                const hash = crypto.createHash('sha256').update(String(enteredPassword).trim()).digest('hex');
-                if (hash !== payload.ph) {
-                    return res.status(401).json({ error: 'Incorrect password' });
-                }
+    if (!st) {
+        return res.status(401).json({ error: 'Share token is required to preview this public file' });
+    }
+
+    try {
+        const payload = jwt.verify(st, JWT_SECRET);
+        if (payload.ph) {
+            if (!enteredPassword) {
+                return res.status(401).json({ error: 'Password required' });
             }
-        } catch (err) {
-            if (err.name === 'TokenExpiredError') {
-                return res.status(410).json({ error: 'This share link has expired and self-destructed.' });
+            const hash = crypto.createHash('sha256').update(String(enteredPassword).trim()).digest('hex');
+            if (hash !== payload.ph) {
+                return res.status(401).json({ error: 'Incorrect password' });
             }
-            return res.status(400).json({ error: 'Invalid or corrupted share link' });
         }
+    } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+            return res.status(410).json({ error: 'This share link has expired and self-destructed.' });
+        }
+        return res.status(400).json({ error: 'Invalid or corrupted share link' });
     }
 
     try {
         const { data: file, error } = await supabaseAdmin
             .from('files')
-            .select('file_path, original_name, mime_type')
+            .select('file_path, original_name, mime_type, folder_id')
             .eq('id', id)
             .eq('is_deleted', 0)
             .maybeSingle();
 
         if (error || !file) return res.status(404).json({ error: 'File not found' });
+
+        // Never allow public preview of vault files
+        if (file.folder_id) {
+            const { data: folder } = await supabaseAdmin.from('folders')
+                .select('name')
+                .eq('id', file.folder_id)
+                .maybeSingle();
+            if (folder && folder.name === '__pd_vault__') {
+                return res.status(403).json({ error: 'Vault files cannot be accessed via public links' });
+            }
+        }
 
         const parts = file.file_path.split('/userfiles/');
         if (parts.length < 2) return res.status(500).json({ error: 'Invalid file path' });

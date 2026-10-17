@@ -81,11 +81,24 @@ module.exports = async function handler(req, res) {
             }
         }
 
+        const { all } = req.query;
+        const { getVaultFolder } = require('../../lib/vault');
+        const vaultFolder = await getVaultFolder(supabaseAdmin, userId);
+
         let query = supabase.from('files').select('*')
-            .eq('is_deleted', 0)
+            .or('is_deleted.eq.0,is_deleted.is.null')
             .order('original_name', { ascending: true });
 
-        if (folder_id) {
+        if (all === 'true') {
+            query = query.eq('user_id', userId);
+            if (vaultFolder) {
+                query = query.neq('folder_id', vaultFolder.id);
+            }
+        } else if (folder_id) {
+            // Block direct access to vault folder
+            if (vaultFolder && String(vaultFolder.id) === String(folder_id)) {
+                return res.status(403).json({ error: 'Vault files must be accessed through the Vault interface' });
+            }
             // Verify folder access
             const hasAccess = await checkFolderAccess(userId, folder_id);
             if (!hasAccess) {

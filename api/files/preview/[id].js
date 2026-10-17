@@ -95,12 +95,37 @@ module.exports = async function handler(req, res) {
 
         if (error || !file) return res.status(404).json({ error: 'File not found' });
 
-        // If authenticated user, verify permissions if in folder
-        if (userId) {
-            const isOwner = String(file.user_id) === String(userId);
-            if (!isOwner && file.folder_id) {
-                const hasAccess = await checkFolderAccess(userId, file.folder_id);
-                if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+        }
+
+        const { verifyVaultToken } = require('../../../lib/auth');
+        const { VAULT_FOLDER_NAME } = require('../../../lib/vault');
+
+        if (file.folder_id) {
+            const { data: folder } = await supabaseAdmin.from('folders')
+                .select('name')
+                .eq('id', file.folder_id)
+                .maybeSingle();
+
+            if (folder && folder.name === VAULT_FOLDER_NAME) {
+                if (String(file.user_id) !== String(userId)) {
+                    return res.status(403).json({ error: 'Access denied' });
+                }
+                const vaultUid = verifyVaultToken(req);
+                if (!vaultUid || String(vaultUid) !== String(userId)) {
+                    return res.status(403).json({ error: 'Private Vault is locked. Enter PIN to access.' });
+                }
+            } else {
+                const isOwner = String(file.user_id) === String(userId);
+                if (!isOwner) {
+                    const hasAccess = await checkFolderAccess(userId, file.folder_id);
+                    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+                }
+            }
+        } else {
+            if (String(file.user_id) !== String(userId)) {
+                return res.status(403).json({ error: 'Access denied' });
             }
         }
 

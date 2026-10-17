@@ -1,11 +1,10 @@
 const bcrypt = require('bcryptjs');
 const { createClient } = require('@supabase/supabase-js');
+const supabase = require('../../lib/supabase');
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-
-// Use the same global OTP store
-if (!global._otpStore) global._otpStore = new Map();
-const otpStore = global._otpStore;
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    : supabase;
 
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
@@ -29,20 +28,27 @@ module.exports = async function handler(req, res) {
         if (newPassword.length < 6)
             return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
-        // Check if code was verified
-        const stored = otpStore.get(email);
-        if (!stored || !stored.verified)
-            return res.status(403).json({ error: 'Email not verified. Please complete verification first.' });
+        // Verify that reset_token is valid and not expired
+        const { data: user, error: fetchError } = await supabaseAdmin
+            .from('users')
+            .select('id, reset_token, reset_expires')
+            .eq('email', email)
+            .maybeSingle();
 
-        // Hash and update
+        if (fetchError || !user || !user.reset_token)
+            return res.status(403).json({ error: 'No active verification session. Please request a new code.' });
+
+        if (new Date(user.reset_expires) < new Date())
+            return res.status(403).json({ error: 'Verification code has expired. Please request a new one.' });
+
+        // Hash and update password, clear reset_token
         const hash = await bcrypt.hash(newPassword, 10);
-        const { error: dbError } = await supabase
-            .from('users').update({ password: hash }).eq('email', email);
+        const { error: dbError } = await supabaseAdmin
+            .from('users')
+            .update({ password: hash, reset_token: null, reset_expires: null })
+            .eq('email', email);
 
         if (dbError) return res.status(500).json({ error: 'Database update failed' });
-
-        // Remove OTP
-        otpStore.delete(email);
 
         res.json({ success: true, message: 'Password reset successful!' });
     } catch (err) {

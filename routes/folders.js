@@ -68,6 +68,7 @@ router.get('/list', requireAuth, async (req, res) => {
         let query = supabaseAdmin.from('folders')
             .select('id, name, is_shared, shared_emails, created_at, parent_id')
             .eq('user_id', req.session.userId)
+            .neq('name', '__pd_vault__')
             .order('name', { ascending: true });
 
         if (parent_id) {

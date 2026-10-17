@@ -1,3 +1,10 @@
+const { createClient } = require('@supabase/supabase-js');
+const supabase = require('../../lib/supabase');
+
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    : supabase;
+
 function setCors(req, res) {
     const origin = req.headers.origin || '*';
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -5,10 +12,6 @@ function setCors(req, res) {
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
-
-// Use the same global OTP store as send-code
-if (!global._otpStore) global._otpStore = new Map();
-const otpStore = global._otpStore;
 
 module.exports = async function handler(req, res) {
     setCors(req, res);
@@ -23,22 +26,20 @@ module.exports = async function handler(req, res) {
         if (!email || !code)
             return res.status(400).json({ error: 'Email and code are required' });
 
-        const stored = otpStore.get(email);
+        const { data: user, error: fetchError } = await supabaseAdmin
+            .from('users')
+            .select('reset_token, reset_expires')
+            .eq('email', email)
+            .maybeSingle();
 
-        if (!stored)
+        if (fetchError || !user || !user.reset_token)
             return res.status(400).json({ error: 'No verification code found. Please request a new one.' });
 
-        if (Date.now() > stored.expiresAt) {
-            otpStore.delete(email);
+        if (new Date(user.reset_expires) < new Date())
             return res.status(400).json({ error: 'Code has expired. Please request a new one.' });
-        }
 
-        if (stored.code !== code)
+        if (String(user.reset_token).trim() !== code)
             return res.status(400).json({ error: 'Invalid verification code' });
-
-        // Mark as verified
-        stored.verified = true;
-        otpStore.set(email, stored);
 
         res.json({ success: true, message: 'Code verified successfully' });
     } catch (err) {

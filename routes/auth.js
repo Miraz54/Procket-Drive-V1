@@ -491,28 +491,21 @@ router.post('/forgot-password/send-code', authLimiter, async (req, res) => {
             .from('users')
             .select('id')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
         if (fetchError || !user) {
             return res.status(400).json({ error: 'No account found with this email' });
         }
 
-        // Rate limit: 60 seconds between requests
-        const existing = otpStore.get(email);
-        if (existing && (Date.now() - (existing.createdAt || 0)) < 60000) {
-            return res.status(429).json({ error: 'Please wait before requesting another code' });
-        }
-
         // Generate 6-digit code
         const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-        // Store with 5-minute expiry
-        otpStore.set(email, {
-            code,
-            expiresAt: Date.now() + 5 * 60 * 1000,
-            createdAt: Date.now(),
-            verified: false
-        });
+        // Save OTP to DB
+        await supabase
+            .from('users')
+            .update({ reset_token: code, reset_expires: expiresAt })
+            .eq('email', email);
 
         // Send email
         await sendVerificationCode(email, code);
@@ -535,24 +528,23 @@ router.post('/forgot-password/verify-code', authLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Email and code are required' });
         }
 
-        const stored = otpStore.get(email);
+        const { data: user, error: fetchError } = await supabase
+            .from('users')
+            .select('reset_token, reset_expires')
+            .eq('email', email)
+            .maybeSingle();
 
-        if (!stored) {
+        if (fetchError || !user || !user.reset_token) {
             return res.status(400).json({ error: 'No verification code found. Please request a new one.' });
         }
 
-        if (Date.now() > stored.expiresAt) {
-            otpStore.delete(email);
+        if (new Date(user.reset_expires) < new Date()) {
             return res.status(400).json({ error: 'Code has expired. Please request a new one.' });
         }
 
-        if (stored.code !== code) {
+        if (String(user.reset_token).trim() !== code) {
             return res.status(400).json({ error: 'Invalid verification code' });
         }
-
-        // Mark as verified
-        stored.verified = true;
-        otpStore.set(email, stored);
 
         res.json({ success: true, message: 'Code verified successfully' });
     } catch (err) {
@@ -561,7 +553,7 @@ router.post('/forgot-password/verify-code', authLimiter, async (req, res) => {
     }
 });
 
-// Step 3: Reset password (only after code is verified)
+// Step 3: Reset password
 router.post('/forgot-password/reset', authLimiter, async (req, res) => {
     try {
         let { email, newPassword } = req.body;
@@ -575,25 +567,30 @@ router.post('/forgot-password/reset', authLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
 
-        // Check if code was verified
-        const stored = otpStore.get(email);
-        if (!stored || !stored.verified) {
-            return res.status(403).json({ error: 'Email not verified. Please complete verification first.' });
+        const { data: user, error: fetchError } = await supabase
+            .from('users')
+            .select('id, reset_token, reset_expires')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (fetchError || !user || !user.reset_token) {
+            return res.status(403).json({ error: 'No active verification session. Please request a new code.' });
         }
 
-        // Hash and update password
+        if (new Date(user.reset_expires) < new Date()) {
+            return res.status(403).json({ error: 'Verification session has expired. Please request a new code.' });
+        }
+
+        // Hash and update password, clear reset_token
         const hash = await bcrypt.hash(newPassword, 10);
         const { error: dbError } = await supabase
             .from('users')
-            .update({ password: hash })
+            .update({ password: hash, reset_token: null, reset_expires: null })
             .eq('email', email);
 
         if (dbError) {
             return res.status(500).json({ error: 'Database update failed' });
         }
-
-        // Remove OTP after successful reset
-        otpStore.delete(email);
 
         res.json({ success: true, message: 'Password reset successful!' });
     } catch (err) {

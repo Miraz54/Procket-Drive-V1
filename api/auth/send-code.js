@@ -36,27 +36,25 @@ module.exports = async function handler(req, res) {
 
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
+        const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+            ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+            : supabase;
+
         // Check user exists
-        const { data: user, error: fetchError } = await supabase
+        const { data: user, error: fetchError } = await supabaseAdmin
             .from('users').select('id').eq('email', email).maybeSingle();
 
         if (fetchError || !user)
             return res.status(400).json({ error: 'No account found with this email' });
 
-        // Rate limit
-        const existing = otpStore.get(email);
-        if (existing && (Date.now() - (existing.createdAt || 0)) < 60000)
-            return res.status(429).json({ error: 'Please wait before requesting another code' });
-
         // Generate 6-digit code
         const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-        otpStore.set(email, {
-            code,
-            expiresAt: Date.now() + 5 * 60 * 1000,
-            createdAt: Date.now(),
-            verified: false
-        });
+        // Save OTP to DB
+        await supabaseAdmin.from('users')
+            .update({ reset_token: code, reset_expires: expiresAt })
+            .eq('email', email);
 
         // Send email
         await transporter.sendMail({

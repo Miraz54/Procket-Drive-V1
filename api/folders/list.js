@@ -23,6 +23,7 @@ module.exports = async function handler(req, res) {
         let query = supabase.from('folders')
             .select('*')
             .eq('user_id', userId)
+            .neq('name', '__pd_vault__')
             .order('name', { ascending: true });
 
         if (parent_id) {

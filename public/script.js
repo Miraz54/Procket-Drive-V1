@@ -533,13 +533,22 @@ async function proceedUpload(file, input, isVault = false) {
         }
 
         if (isVault) {
-            const vaultIds = getVaultFileIds();
             const newId = uploadedFile && uploadedFile.id ? String(uploadedFile.id) : null;
-            if (newId && !vaultIds.includes(newId)) {
-                vaultIds.push(newId);
-                saveVaultFileIds(vaultIds);
+            if (newId) {
+                fetch('/api/vault/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ fileId: newId })
+                }).then(() => {
+                    pdToast('success', 'Secured in Vault! 🛡️', `"${file.name}" was uploaded directly into your Private Vault across all devices.`, 3500);
+                    if (activeNav === 'vault') {
+                        renderVaultView();
+                    }
+                }).catch(() => {});
+            } else {
+                pdToast('success', 'Secured in Vault! 🛡️', `"${file.name}" was uploaded directly into your Private Vault.`, 3500);
             }
-            pdToast('success', 'Secured in Vault! 🛡️', `"${file.name}" was uploaded directly into your Private Vault.`, 3500);
         } else {
             showToast(`✅ ${file.name} uploaded!`, 'success');
         }
@@ -556,16 +565,8 @@ async function proceedUpload(file, input, isVault = false) {
             const localUsed = allFiles.reduce((s, f) => s + (Number(f.size) || 0), 0) + file.size;
             updateStorageUI(localUsed, allFiles.length + 1);
             loadFiles().then(() => {
-                if (isVault) {
-                    const vaultIds = getVaultFileIds();
-                    const matched = allFiles.find(f => f.name === file.name && Math.abs(f.size - file.size) < 10);
-                    if (matched && !vaultIds.includes(String(matched.id))) {
-                        vaultIds.push(String(matched.id));
-                        saveVaultFileIds(vaultIds);
-                    }
-                    if (activeNav === 'vault') {
-                        renderVaultView();
-                    }
+                if (isVault && activeNav === 'vault') {
+                    renderVaultView();
                 }
             });
         }
@@ -1413,6 +1414,7 @@ window.downloadSharedFolderAsZip = downloadSharedFolderAsZip;
 
 // ============================================================
 //  FEATURE: Secure Private Vault (PIN Lock & Secret Safe)
+//  Synced across all devices via Server-Side Vault API
 // ============================================================
 let _vaultUnlocked = false;
 let _vaultPinDigits = '';
@@ -1420,6 +1422,8 @@ let _vaultSetupStep = 1;
 let _vaultTempFirstPin = '';
 let _vaultCountdownSeconds = 120;
 let _vaultAutoLockInterval = null;
+let _vaultIsSetup = false;
+let _vaultFiles = [];
 
 function getCurrentUserEmail() {
     return (document.getElementById('userEmail')?.textContent || '').trim().toLowerCase();
@@ -1444,33 +1448,30 @@ function saveVaultFileIds(ids) {
     } catch (e) {}
 }
 
-function hashPin(pin) {
-    let hash = 0;
-    for (let i = 0; i < pin.length; i++) {
-        const char = pin.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash |= 0;
+async function checkVaultStatus() {
+    try {
+        const res = await fetch('/api/vault/status', { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            _vaultIsSetup = !!data.isSetup;
+            _vaultUnlocked = !!data.isUnlocked;
+            const navBadge = document.getElementById('vaultNavLockBadge');
+            if (_vaultUnlocked) {
+                if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
+                startVaultAutoLock();
+            } else {
+                if (navBadge) navBadge.innerHTML = '<i class="fas fa-lock"></i>';
+            }
+            return data;
+        }
+    } catch (e) {
+        console.error('checkVaultStatus error:', e);
     }
-    return 'v_pin_' + Math.abs(hash) + '_' + pin.length;
-}
-
-function getVaultPinHash() {
-    const email = getCurrentUserEmail() || 'default';
-    return localStorage.getItem(`pd_vault_pin_${email}`);
+    return { isSetup: false, isUnlocked: false };
 }
 
 function isVaultPinSet() {
-    return !!getVaultPinHash();
-}
-
-function setVaultPin(pin) {
-    const email = getCurrentUserEmail() || 'default';
-    localStorage.setItem(`pd_vault_pin_${email}`, hashPin(pin));
-}
-
-function verifyVaultPin(pin) {
-    const stored = getVaultPinHash();
-    return stored && stored === hashPin(pin);
+    return _vaultIsSetup;
 }
 
 function startVaultAutoLock() {
@@ -1494,10 +1495,14 @@ function updateVaultCountdownUI() {
     badge.innerHTML = `<i class="fas fa-hourglass-half"></i> Auto-locks in ${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-function lockVault(auto = false) {
+async function lockVault(auto = false) {
     _vaultUnlocked = false;
     _vaultPinDigits = '';
+    _vaultFiles = [];
     clearInterval(_vaultAutoLockInterval);
+    try {
+        await fetch('/api/vault/lock', { method: 'POST', credentials: 'include' });
+    } catch (e) {}
     const navBadge = document.getElementById('vaultNavLockBadge');
     if (navBadge) navBadge.innerHTML = '<i class="fas fa-lock"></i>';
     if (activeNav === 'vault') {
@@ -1512,43 +1517,90 @@ function openVaultView() {
 }
 window.openVaultView = openVaultView;
 
-function toggleFileVault(fileId) {
-    const file = allFiles.find(f => String(f.id) === String(fileId));
+async function toggleFileVault(fileId) {
+    const file = allFiles.find(f => String(f.id) === String(fileId)) || _vaultFiles.find(f => String(f.id) === String(fileId));
     const fileName = file ? file.name : 'File';
-    let vaultIds = getVaultFileIds();
-    const strId = String(fileId);
 
-    if (vaultIds.includes(strId)) {
-        // Remove from vault -> restored to drive
-        vaultIds = vaultIds.filter(id => id !== strId);
-        saveVaultFileIds(vaultIds);
-        pdToast('success', 'Restored to Drive! 📂', `"${fileName}" is now back in My Drive.`, 3000);
-    } else {
-        // Move into vault
-        if (!isVaultPinSet()) {
+    if (!_vaultIsSetup) {
+        await checkVaultStatus();
+        if (!_vaultIsSetup) {
             pdToast('info', 'Setup Vault First', 'Please set up your Private Vault PIN first.', 3000);
             openVaultView();
             return;
         }
-        vaultIds.push(strId);
-        saveVaultFileIds(vaultIds);
-        pdToast('success', 'Moved to Vault! 🔒', `"${fileName}" is now hidden from Drive and secured in your Vault.`, 3000);
     }
 
-    if (activeNav === 'vault') {
-        renderVaultView();
-    } else {
-        renderDriveView();
+    try {
+        const res = await fetch('/api/vault/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ fileId })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            if (data.inVault) {
+                pdToast('success', 'Moved to Vault! 🔒', `"${fileName}" is now hidden from Drive and secured in your Vault across all devices.`, 3000);
+            } else {
+                pdToast('success', 'Restored to Drive! 📂', `"${fileName}" is now back in My Drive.`, 3000);
+            }
+            await loadFiles();
+            if (activeNav === 'vault') {
+                await renderVaultView();
+            } else {
+                renderDriveView();
+            }
+        } else {
+            showToast(data.error || 'Failed to update vault', 'error');
+        }
+    } catch (err) {
+        showToast('Network error updating vault', 'error');
     }
 }
 window.toggleFileVault = toggleFileVault;
 
-function renderVaultView(searchQuery = '') {
+async function loadVaultFiles(searchQuery = '') {
+    try {
+        const res = await fetch('/api/vault/files', { credentials: 'include' });
+        if (res.ok) {
+            _vaultFiles = await res.json();
+
+            // Auto-migrate any legacy localStorage file IDs to server vault
+            const legacyIds = getVaultFileIds();
+            if (legacyIds.length > 0) {
+                fetch('/api/vault/migrate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ fileIds: legacyIds })
+                }).then(r => r.json()).then(d => {
+                    if (d.success) {
+                        const email = getCurrentUserEmail() || 'default';
+                        localStorage.removeItem(`pd_vault_files_${email}`);
+                    }
+                }).catch(() => {});
+            }
+        } else if (res.status === 401 || res.status === 403) {
+            _vaultUnlocked = false;
+            _vaultFiles = [];
+        }
+    } catch (e) {
+        console.error('loadVaultFiles error:', e);
+    }
+    const container = document.getElementById('fileList');
+    if (container && activeNav === 'vault' && _vaultUnlocked) {
+        renderVaultFilesUI(container, searchQuery);
+    }
+}
+
+async function renderVaultView(searchQuery = '') {
     const container = document.getElementById('fileList');
     if (!container) return;
     container.className = "file-container";
 
-    if (!isVaultPinSet()) {
+    await checkVaultStatus();
+
+    if (!_vaultIsSetup) {
         renderVaultSetupUI(container);
         return;
     }
@@ -1558,13 +1610,13 @@ function renderVaultView(searchQuery = '') {
         return;
     }
 
-    renderVaultFilesUI(container, searchQuery);
+    await loadVaultFiles(searchQuery);
 }
 
 function renderVaultSetupUI(container) {
     const stepTitle = _vaultSetupStep === 1 ? 'Setup Private Vault' : 'Confirm Your PIN';
     const stepSub = _vaultSetupStep === 1 
-        ? 'Create a 4-digit PIN to secure and hide confidential files.' 
+        ? 'Create a 4-digit PIN to secure and hide confidential files across all devices.' 
         : 'Re-enter your 4-digit PIN to confirm setup.';
 
     container.innerHTML = `
@@ -1591,7 +1643,7 @@ function renderVaultSetupUI(container) {
                 <button class="vault-key vault-key-action" onclick="vaultKeypadBackspace()"><i class="fas fa-backspace"></i></button>
             </div>
             <p style="font-size:0.78rem;color:var(--text-3);margin-top:14px;">
-                <i class="fas fa-lock"></i> Protected by Client-Side Vault Encryption
+                <i class="fas fa-lock"></i> Protected by Secure Cloud Vault Encryption
             </p>
         </div>
     `;
@@ -1684,8 +1736,8 @@ function attachVaultKeyboardListener() {
     });
 }
 
-function processVaultPinSubmission() {
-    if (!isVaultPinSet()) {
+async function processVaultPinSubmission() {
+    if (!_vaultIsSetup) {
         if (_vaultSetupStep === 1) {
             _vaultTempFirstPin = _vaultPinDigits;
             _vaultPinDigits = '';
@@ -1693,16 +1745,35 @@ function processVaultPinSubmission() {
             renderVaultView();
         } else {
             if (_vaultPinDigits === _vaultTempFirstPin) {
-                setVaultPin(_vaultPinDigits);
-                _vaultUnlocked = true;
-                _vaultPinDigits = '';
-                _vaultSetupStep = 1;
-                _vaultTempFirstPin = '';
-                startVaultAutoLock();
-                const navBadge = document.getElementById('vaultNavLockBadge');
-                if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
-                pdToast('success', 'Vault Setup Complete! 🛡️', 'Your Private Vault PIN is now active and unlocked.', 4000);
-                renderVaultView();
+                try {
+                    const res = await fetch('/api/vault/setup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ pin: _vaultPinDigits })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        _vaultUnlocked = true;
+                        _vaultIsSetup = true;
+                        _vaultPinDigits = '';
+                        _vaultSetupStep = 1;
+                        _vaultTempFirstPin = '';
+                        startVaultAutoLock();
+                        const navBadge = document.getElementById('vaultNavLockBadge');
+                        if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
+                        pdToast('success', 'Vault Setup Complete! 🛡️', 'Your Private Vault PIN is now active on all devices.', 4000);
+                        renderVaultView();
+                    } else {
+                        const err = document.getElementById('vaultSetupError');
+                        if (err) err.textContent = '❌ ' + (data.error || 'Setup failed');
+                        _vaultPinDigits = '';
+                    }
+                } catch (e) {
+                    const err = document.getElementById('vaultSetupError');
+                    if (err) err.textContent = '❌ Network error setting up PIN';
+                    _vaultPinDigits = '';
+                }
             } else {
                 const err = document.getElementById('vaultSetupError');
                 if (err) err.textContent = '❌ PINs do not match. Starting over.';
@@ -1713,33 +1784,45 @@ function processVaultPinSubmission() {
             }
         }
     } else {
-        if (verifyVaultPin(_vaultPinDigits)) {
-            _vaultUnlocked = true;
-            _vaultPinDigits = '';
-            startVaultAutoLock();
-            const navBadge = document.getElementById('vaultNavLockBadge');
-            if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
-            pdToast('success', 'Access Granted! 🔓', 'Private Vault unlocked.', 2500);
-            renderVaultView();
-        } else {
-            const err = document.getElementById('vaultUnlockError');
-            if (err) err.textContent = '❌ Incorrect PIN. Please try again.';
-            _vaultPinDigits = '';
-            const dots = document.querySelectorAll('.vault-pin-dot');
-            dots.forEach(d => {
-                d.style.borderColor = '#ef4444';
-                d.classList.remove('filled');
+        try {
+            const res = await fetch('/api/vault/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ pin: _vaultPinDigits })
             });
-            setTimeout(() => {
-                dots.forEach(d => d.style.borderColor = '');
-            }, 600);
+            const data = await res.json();
+            if (res.ok) {
+                _vaultUnlocked = true;
+                _vaultPinDigits = '';
+                startVaultAutoLock();
+                const navBadge = document.getElementById('vaultNavLockBadge');
+                if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
+                pdToast('success', 'Access Granted! 🔓', 'Private Vault unlocked.', 2500);
+                renderVaultView();
+            } else {
+                const err = document.getElementById('vaultUnlockError');
+                if (err) err.textContent = '❌ ' + (data.error || 'Incorrect PIN. Please try again.');
+                _vaultPinDigits = '';
+                const dots = document.querySelectorAll('.vault-pin-dot');
+                dots.forEach(d => {
+                    d.style.borderColor = '#ef4444';
+                    d.classList.remove('filled');
+                });
+                setTimeout(() => {
+                    dots.forEach(d => d.style.borderColor = '');
+                }, 600);
+            }
+        } catch (e) {
+            const err = document.getElementById('vaultUnlockError');
+            if (err) err.textContent = '❌ Network error during verification';
+            _vaultPinDigits = '';
         }
     }
 }
 
 function renderVaultFilesUI(container, searchQuery = '') {
-    const vaultIds = getVaultFileIds();
-    let vaultFiles = allFiles.filter(f => vaultIds.includes(String(f.id)));
+    let vaultFiles = [..._vaultFiles];
 
     // Sort alphabetically (A-Z)
     vaultFiles.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
@@ -1751,7 +1834,6 @@ function renderVaultFilesUI(container, searchQuery = '') {
         vaultFiles = vaultFiles.filter(f => (f.name || '').toLowerCase().includes(q));
     }
 
-    // Keep container as a clean block element so the banner spans 100% width!
     container.className = "file-container";
 
     const m = Math.floor(_vaultCountdownSeconds / 60);
@@ -1770,7 +1852,7 @@ function renderVaultFilesUI(container, searchQuery = '') {
                         <h3 class="vault-header-title">Private Vault</h3>
                         <span class="vault-status-pill unlocked"><i class="fas fa-unlock"></i> Unlocked</span>
                     </div>
-                    <p class="vault-header-subtitle">${totalVaultCount} private file(s) protected &amp; hidden from Drive</p>
+                    <p class="vault-header-subtitle">${totalVaultCount} private file(s) protected &amp; hidden from Drive across all devices</p>
                 </div>
             </div>
             <div class="vault-header-actions">
@@ -1797,7 +1879,7 @@ function renderVaultFilesUI(container, searchQuery = '') {
                     <i class="fas fa-shield-halved"></i>
                 </div>
                 <p style="font-size:1.15rem;margin-top:8px;">Your Private Vault is Empty</p>
-                <small style="max-width:440px;line-height:1.5;">Files in your Private Vault are strictly hidden from My Drive and require your 4-digit PIN to access.</small>
+                <small style="max-width:440px;line-height:1.5;">Files in your Private Vault are strictly hidden from My Drive on all your devices and require your 4-digit PIN to access.</small>
                 <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
                     <button class="btn-primary vault-upload-btn" onclick="document.getElementById('vaultDirectFileInput').click()" style="padding:10px 20px;font-size:0.9rem;">
                         <i class="fas fa-cloud-arrow-up"></i> Upload File Directly to Vault
@@ -1824,7 +1906,6 @@ function renderVaultFilesUI(container, searchQuery = '') {
         return;
     }
 
-    // Wrap file cards in sub-container matching currentView so banner is completely independent of grid!
     html += `<div class="file-container ${currentView === 'grid' ? 'grid-view' : 'list-view'}" style="padding:0;min-height:auto;width:100%;">`;
 
     if (currentView === 'grid') {
@@ -1866,9 +1947,6 @@ function renderVaultFilesUI(container, searchQuery = '') {
     container.innerHTML = html;
 }
 
-// ────────────────────────────────────────────────────────────
-// In-Vault Drive File Picker Modal Handlers
-// ────────────────────────────────────────────────────
 let _vaultImportSearchQuery = '';
 
 function openVaultImportModal() {
@@ -1890,8 +1968,7 @@ function renderVaultImportFileList() {
     const listEl = document.getElementById('vaultImportList');
     if (!listEl) return;
 
-    const vaultIds = getVaultFileIds();
-    let availableFiles = allFiles.filter(f => !vaultIds.includes(String(f.id)));
+    let availableFiles = [...allFiles];
 
     // Sort alphabetically (A-Z)
     availableFiles.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
@@ -1937,16 +2014,13 @@ function renderVaultImportFileList() {
     `).join('');
 }
 
-function importFileToVault(fileId) {
+async function importFileToVault(fileId) {
     const file = allFiles.find(f => String(f.id) === String(fileId));
     const fileName = file ? file.name : 'File';
-    let vaultIds = getVaultFileIds();
-    const strId = String(fileId);
 
-    // Duplicate check: check if file with same name is already in Vault!
-    const vaultFiles = allFiles.filter(f => vaultIds.includes(String(f.id)));
-    const duplicateInVault = vaultFiles.find(f =>
-        String(f.id) !== strId && f.name && f.name.trim().toLowerCase() === fileName.trim().toLowerCase()
+    // Duplicate check in vault
+    const duplicateInVault = _vaultFiles.find(f =>
+        String(f.id) !== String(fileId) && f.name && f.name.trim().toLowerCase() === fileName.trim().toLowerCase()
     );
 
     if (duplicateInVault) {
@@ -1957,12 +2031,7 @@ function importFileToVault(fileId) {
         }
     }
 
-    if (!vaultIds.includes(strId)) {
-        vaultIds.push(strId);
-        saveVaultFileIds(vaultIds);
-    }
-
-    pdToast('success', 'Moved to Vault! 🔒', `"${fileName}" is now secured in Private Vault.`, 3000);
+    await toggleFileVault(fileId);
 
     // Update item row in modal immediately
     const itemEl = document.getElementById(`vault-import-item-${fileId}`);
@@ -1985,30 +2054,42 @@ function importFileToVault(fileId) {
             renderVaultImportFileList();
         }, 1200);
     }
-
-    // Immediately update background vault view
-    if (activeNav === 'vault') {
-        renderVaultView();
-    }
 }
 window.importFileToVault = importFileToVault;
 
-function resetVaultPinPrompt() {
-    showConfirmDialog(
-        'Reset Vault PIN',
-        'Are you sure you want to reset your Vault PIN? You will be prompted to create a new 4-digit PIN.',
-        false
-    ).then(confirmed => {
-        if (!confirmed) return;
-        const email = getCurrentUserEmail() || 'default';
-        localStorage.removeItem(`pd_vault_pin_${email}`);
-        _vaultUnlocked = false;
-        _vaultPinDigits = '';
-        _vaultSetupStep = 1;
-        _vaultTempFirstPin = '';
-        pdToast('info', 'PIN Reset', 'Please create a new 4-digit PIN.', 3000);
-        renderVaultView();
-    });
+async function resetVaultPinPrompt() {
+    const accountPassword = prompt('🔒 Reset Vault PIN Security Check:\nPlease enter your Account Password:');
+    if (!accountPassword) return;
+
+    const newPin = prompt('Enter a new 4-digit Vault PIN:');
+    if (!newPin || newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+        alert('PIN must be exactly 4 digits (0-9).');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/vault/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ accountPassword, newPin })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            _vaultUnlocked = true;
+            _vaultIsSetup = true;
+            _vaultPinDigits = '';
+            startVaultAutoLock();
+            const navBadge = document.getElementById('vaultNavLockBadge');
+            if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
+            pdToast('success', 'PIN Reset Successful! 🛡️', 'Your Private Vault PIN has been reset and unlocked.', 4000);
+            renderVaultView();
+        } else {
+            alert('❌ ' + (data.error || 'Failed to reset PIN. Make sure your account password is correct.'));
+        }
+    } catch (e) {
+        alert('❌ Network error while resetting PIN.');
+    }
 }
 window.resetVaultPinPrompt = resetVaultPinPrompt;
 
@@ -2688,11 +2769,7 @@ async function deleteFile(id) {
                 updateStorageUI(localUsed, allFiles.length);
             }
             if (activeNav === 'vault') {
-                let vaultIds = getVaultFileIds();
-                if (vaultIds.includes(String(id))) {
-                    vaultIds = vaultIds.filter(vId => vId !== String(id));
-                    saveVaultFileIds(vaultIds);
-                }
+                _vaultFiles = _vaultFiles.filter(v => String(v.id) !== String(id));
                 renderVaultView();
             } else {
                 displayFiles(allFiles);

@@ -5,7 +5,8 @@ const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
-const { verifyToken } = require('../lib/auth');
+const { verifyToken, verifyVaultToken } = require('../lib/auth');
+const { getVaultFolder, VAULT_FOLDER_NAME } = require('../lib/vault');
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ProcketDrive2024!SecretKey#xyz789';
@@ -555,6 +556,8 @@ router.get('/list', requireAuth, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const { folder_id, all } = req.query;
 
+    const vaultFolder = await getVaultFolder(supabaseAdmin, req.session.userId);
+
     let query = supabaseAdmin.from('files')
         .select('id, original_name, file_size, mime_type, uploaded_at, folder_id')
         .or('is_deleted.eq.0,is_deleted.is.null')
@@ -562,7 +565,14 @@ router.get('/list', requireAuth, async (req, res) => {
 
     if (all === 'true') {
         query = query.eq('user_id', req.session.userId);
+        if (vaultFolder) {
+            query = query.neq('folder_id', vaultFolder.id);
+        }
     } else if (folder_id) {
+        // Block direct access to vault folder via regular list API
+        if (vaultFolder && String(vaultFolder.id) === String(folder_id)) {
+            return res.status(403).json({ error: 'Vault files must be accessed through the Vault interface' });
+        }
         // Verify access to folder
         const hasAccess = await checkFolderAccess(req.session.userId, folder_id);
         if (!hasAccess) {
@@ -776,12 +786,36 @@ router.get('/preview/:id', async (req, res) => {
         .maybeSingle();
     if (error || !file) return res.status(404).json({ error: 'File not found' });
 
-    // If authenticated user, verify permissions if in folder
-    if (userId) {
-        const isOwner = String(file.user_id) === String(userId);
-        if (!isOwner && file.folder_id) {
-            const hasAccess = await checkFolderAccess(userId, file.folder_id);
-            if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+    if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+    }
+
+    // Verify folder or vault permissions
+    if (file.folder_id) {
+        const { data: folder } = await supabaseAdmin.from('folders')
+            .select('name')
+            .eq('id', file.folder_id)
+            .maybeSingle();
+
+        if (folder && folder.name === VAULT_FOLDER_NAME) {
+            if (String(file.user_id) !== String(userId)) {
+                return res.status(403).json({ error: 'Access denied' });
+            }
+            const vaultUid = verifyVaultToken(req);
+            const unlocked = (vaultUid && String(vaultUid) === String(userId)) || (req.session && req.session.vaultUnlocked);
+            if (!unlocked) {
+                return res.status(403).json({ error: 'Private Vault is locked. Enter PIN to access.' });
+            }
+        } else {
+            const isOwner = String(file.user_id) === String(userId);
+            if (!isOwner) {
+                const hasAccess = await checkFolderAccess(userId, file.folder_id);
+                if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+            }
+        }
+    } else {
+        if (String(file.user_id) !== String(userId)) {
+            return res.status(403).json({ error: 'Access denied' });
         }
     }
 
@@ -838,12 +872,36 @@ router.get('/download/:id', async (req, res) => {
             .maybeSingle();
         if (error || !file) return res.status(404).json({ error: 'File not found' });
 
-        // If authenticated user, verify permissions if in folder
-        if (userId) {
-            const isOwner = String(file.user_id) === String(userId);
-            if (!isOwner && file.folder_id) {
-                const hasAccess = await checkFolderAccess(userId, file.folder_id);
-                if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+        }
+
+        // Verify folder or vault permissions
+        if (file.folder_id) {
+            const { data: folder } = await supabaseAdmin.from('folders')
+                .select('name')
+                .eq('id', file.folder_id)
+                .maybeSingle();
+
+            if (folder && folder.name === VAULT_FOLDER_NAME) {
+                if (String(file.user_id) !== String(userId)) {
+                    return res.status(403).json({ error: 'Access denied' });
+                }
+                const vaultUid = verifyVaultToken(req);
+                const unlocked = (vaultUid && String(vaultUid) === String(userId)) || (req.session && req.session.vaultUnlocked);
+                if (!unlocked) {
+                    return res.status(403).json({ error: 'Private Vault is locked. Enter PIN to access.' });
+                }
+            } else {
+                const isOwner = String(file.user_id) === String(userId);
+                if (!isOwner) {
+                    const hasAccess = await checkFolderAccess(userId, file.folder_id);
+                    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+                }
+            }
+        } else {
+            if (String(file.user_id) !== String(userId)) {
+                return res.status(403).json({ error: 'Access denied' });
             }
         }
 
