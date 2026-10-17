@@ -909,7 +909,17 @@ router.get('/download/:id', async (req, res) => {
         if (parts.length < 2) return res.status(500).json({ error: 'Invalid file path' });
         const storagePath = parts.slice(1).join('/userfiles/');
 
-        const { data, error: downloadError } = await supabaseAdmin.storage.from('userfiles').download(storagePath);
+        let { data, error: downloadError } = await supabaseAdmin.storage.from('userfiles').download(storagePath);
+        if (downloadError) {
+            const decoded = decodeURIComponent(storagePath);
+            if (decoded !== storagePath) {
+                const retry = await supabaseAdmin.storage.from('userfiles').download(decoded);
+                if (!retry.error) {
+                    data = retry.data;
+                    downloadError = null;
+                }
+            }
+        }
         if (downloadError) return res.status(500).json({ error: 'Download failed: ' + downloadError.message });
 
         const buffer = Buffer.from(await data.arrayBuffer());

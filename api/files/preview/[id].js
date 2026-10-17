@@ -11,7 +11,7 @@ function setCors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Vault-Token');
 }
 
 // Helper to check if a user has access (owner or shared) to a folder
@@ -132,13 +132,24 @@ module.exports = async function handler(req, res) {
         // Extract relative path from public URL
         const parts = file.file_path.split('/userfiles/');
         if (parts.length < 2) return res.status(500).json({ error: 'Invalid file path' });
-        const storagePath = parts[1];
+        const storagePath = parts.slice(1).join('/userfiles/');
 
-        const { data, error: downloadError } = await supabaseAdmin.storage
+        let { data, error: downloadError } = await supabaseAdmin.storage
             .from('userfiles')
             .download(storagePath);
 
-        if (downloadError) return res.status(500).json({ error: 'Download failed' });
+        if (downloadError) {
+            const decoded = decodeURIComponent(storagePath);
+            if (decoded !== storagePath) {
+                const retry = await supabaseAdmin.storage.from('userfiles').download(decoded);
+                if (!retry.error) {
+                    data = retry.data;
+                    downloadError = null;
+                }
+            }
+        }
+
+        if (downloadError) return res.status(500).json({ error: 'Download failed: ' + (downloadError.message || 'Storage error') });
 
         const buffer = Buffer.from(await data.arrayBuffer());
         res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');

@@ -1424,6 +1424,8 @@ let _vaultCountdownSeconds = 120;
 let _vaultAutoLockInterval = null;
 let _vaultIsSetup = false;
 let _vaultFiles = [];
+let _vaultToken = '';
+try { _vaultToken = sessionStorage.getItem('pd_vault_token') || ''; } catch(e) {}
 
 function getCurrentUserEmail() {
     return (document.getElementById('userEmail')?.textContent || '').trim().toLowerCase();
@@ -1450,11 +1452,17 @@ function saveVaultFileIds(ids) {
 
 async function checkVaultStatus() {
     try {
-        const res = await fetch('/api/vault/status', { credentials: 'include' });
+        const headers = {};
+        if (_vaultToken) headers['X-Vault-Token'] = _vaultToken;
+        const res = await fetch('/api/vault/status', { credentials: 'include', headers });
         if (res.ok) {
             const data = await res.json();
             _vaultIsSetup = !!data.isSetup;
             _vaultUnlocked = !!data.isUnlocked;
+            if (!_vaultUnlocked) {
+                _vaultToken = '';
+                try { sessionStorage.removeItem('pd_vault_token'); } catch(e) {}
+            }
             const navBadge = document.getElementById('vaultNavLockBadge');
             if (_vaultUnlocked) {
                 if (navBadge) navBadge.innerHTML = '<i class="fas fa-unlock" style="color:#34d399;"></i>';
@@ -1499,6 +1507,8 @@ async function lockVault(auto = false) {
     _vaultUnlocked = false;
     _vaultPinDigits = '';
     _vaultFiles = [];
+    _vaultToken = '';
+    try { sessionStorage.removeItem('pd_vault_token'); } catch (e) {}
     clearInterval(_vaultAutoLockInterval);
     try {
         await fetch('/api/vault/lock', { method: 'POST', credentials: 'include' });
@@ -1531,9 +1541,11 @@ async function toggleFileVault(fileId) {
     }
 
     try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (_vaultToken) headers['X-Vault-Token'] = _vaultToken;
         const res = await fetch('/api/vault/toggle', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             credentials: 'include',
             body: JSON.stringify({ fileId })
         });
@@ -1561,7 +1573,9 @@ window.toggleFileVault = toggleFileVault;
 
 async function loadVaultFiles(searchQuery = '') {
     try {
-        const res = await fetch('/api/vault/files', { credentials: 'include' });
+        const headers = {};
+        if (_vaultToken) headers['X-Vault-Token'] = _vaultToken;
+        const res = await fetch('/api/vault/files', { credentials: 'include', headers });
         if (res.ok) {
             _vaultFiles = await res.json();
 
@@ -1756,6 +1770,10 @@ async function processVaultPinSubmission() {
                     if (res.ok) {
                         _vaultUnlocked = true;
                         _vaultIsSetup = true;
+                        if (data.vaultToken) {
+                            _vaultToken = data.vaultToken;
+                            try { sessionStorage.setItem('pd_vault_token', _vaultToken); } catch(e) {}
+                        }
                         _vaultPinDigits = '';
                         _vaultSetupStep = 1;
                         _vaultTempFirstPin = '';
@@ -1794,6 +1812,10 @@ async function processVaultPinSubmission() {
             const data = await res.json();
             if (res.ok) {
                 _vaultUnlocked = true;
+                if (data.vaultToken) {
+                    _vaultToken = data.vaultToken;
+                    try { sessionStorage.setItem('pd_vault_token', _vaultToken); } catch(e) {}
+                }
                 _vaultPinDigits = '';
                 startVaultAutoLock();
                 const navBadge = document.getElementById('vaultNavLockBadge');
@@ -2628,9 +2650,10 @@ function closeShareModal() { closeModal('shareModal'); }
 
 // Preview & download
 async function previewFile(id) {
-    const file = allFiles.find(f => String(f.id) === String(id));
+    const file = allFiles.find(f => String(f.id) === String(id)) || _vaultFiles.find(f => String(f.id) === String(id));
     const name = file ? file.name : 'File';
-    const type = file ? file.type : '';
+    const type = file ? (file.type || '') : '';
+    const isVault = !!(file && (file.is_vault || _vaultFiles.some(vf => String(vf.id) === String(id))));
 
     const modal = document.getElementById('previewModal');
     const title = document.getElementById('previewFileName');
@@ -2646,32 +2669,39 @@ async function previewFile(id) {
     const isAudio = type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'aac', 'flac'].includes(ext);
 
     try {
-        // For MS Office or Video/Audio files, fetch the public Supabase direct URL
-        if (isOffice || isVideo || isAudio) {
+        // For non-vault MS Office or Video/Audio files, fetch the public Supabase direct URL
+        if ((isOffice || isVideo || isAudio) && !isVault) {
             const res = await fetch(`/api/files/share/${id}`, { credentials: 'include' });
             const data = await res.json();
             if (!res.ok || !data.url) throw new Error('Could not get public file URL');
 
             if (isOffice) {
-                // Microsoft Office Viewer embedding requires a public URL
                 const officeUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(data.url)}`;
                 content.innerHTML = `<iframe src="${officeUrl}" style="width:100%;height:68vh;border:none;"></iframe>`;
             } else if (isVideo) {
-                // Direct streaming video (supports seeking/range requests)
                 content.innerHTML = `<video controls autoplay style="max-width:100%;max-height:68vh;background:#000;"><source src="${data.url}"></video>`;
             } else if (isAudio) {
-                // Direct streaming audio
                 content.innerHTML = `<audio controls autoplay style="width:100%;margin-top:24px;"><source src="${data.url}"></audio>`;
             }
         } else {
-            // For standard files, fetch as a blob via authentication
-            const res = await fetch(`/api/files/preview/${id}`, { credentials: 'include' });
-            if (!res.ok) throw new Error('Preview failed');
+            // For standard files and all vault files, fetch as an authenticated blob
+            const headers = {};
+            if (_vaultToken) headers['X-Vault-Token'] = _vaultToken;
+            const queryParams = _vaultToken ? `?vault_token=${encodeURIComponent(_vaultToken)}` : '';
+            const res = await fetch(`/api/files/preview/${id}${queryParams}`, { credentials: 'include', headers });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Preview failed');
+            }
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             content.dataset.blobUrl = url;
 
-            if (type.startsWith('image/')) {
+            if (isVideo) {
+                content.innerHTML = `<video controls autoplay style="max-width:100%;max-height:68vh;background:#000;"><source src="${url}"></video>`;
+            } else if (isAudio) {
+                content.innerHTML = `<audio controls autoplay style="width:100%;margin-top:24px;"><source src="${url}"></audio>`;
+            } else if (type.startsWith('image/')) {
                 content.innerHTML = `<img src="${url}" alt="${escapeHtml(name)}">`;
             } else if (type === 'application/pdf' || ext === 'pdf') {
                 content.innerHTML = `<iframe src="${url}" style="width:100%;height:68vh;border:none;"></iframe>`;
@@ -2679,7 +2709,7 @@ async function previewFile(id) {
                 const text = await blob.text();
                 content.innerHTML = `<pre style="text-align:left;white-space:pre-wrap;color:var(--text-1);background:var(--bg-input);padding:16px;border-radius:10px;max-height:60vh;overflow:auto;">${escapeHtml(text)}</pre>`;
             } else {
-                content.innerHTML = `<p style="color:var(--text-2);padding:24px;">Preview not available for this file type. <br><button class="btn-primary btn-small" onclick="downloadFile(${id})" style="margin-top:12px;"><i class="fas fa-download"></i> Download</button></p>`;
+                content.innerHTML = `<p style="color:var(--text-2);padding:24px;">Preview not available for this file type. <br><button class="btn-primary btn-small" onclick="downloadFile('${id}')" style="margin-top:12px;"><i class="fas fa-download"></i> Download</button></p>`;
             }
         }
     } catch (err) {
@@ -2740,8 +2770,61 @@ async function previewSharedFile(id, name, type) {
     }
 }
 
+async function downloadFile(id) {
+    const file = allFiles.find(f => String(f.id) === String(id)) || _vaultFiles.find(f => String(f.id) === String(id));
+    const fileName = file ? file.name : `file_${id}`;
 
-function downloadFile(id) { window.open(`/api/files/download/${id}`, '_blank'); }
+    try {
+        pdToast('info', 'Starting Download…', `Preparing "${fileName}"…`, 2500);
+
+        const headers = {};
+        if (_vaultToken) {
+            headers['X-Vault-Token'] = _vaultToken;
+        }
+
+        const queryParams = _vaultToken ? `?vault_token=${encodeURIComponent(_vaultToken)}` : '';
+        const res = await fetch(`/api/files/download/${id}${queryParams}`, {
+            credentials: 'include',
+            headers
+        });
+
+        if (!res.ok) {
+            let errorMsg = `Download failed (${res.status})`;
+            try {
+                const errData = await res.json();
+                if (errData && errData.error) errorMsg = errData.error;
+            } catch(e) {}
+            throw new Error(errorMsg);
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+        pdToast('success', 'Download Complete! 🎉', `"${fileName}" downloaded successfully.`, 3500);
+    } catch (err) {
+        console.error('[downloadFile] error:', err);
+        // Fallback: direct anchor trigger
+        try {
+            const fallbackUrl = `/api/files/download/${id}${_vaultToken ? `?vault_token=${encodeURIComponent(_vaultToken)}` : ''}`;
+            const a = document.createElement('a');
+            a.href = fallbackUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } catch(fallbackErr) {
+            pdToast('error', 'Download Failed', err.message || 'Could not download file', 4000);
+        }
+    }
+}
+window.downloadFile = downloadFile;
 
 // Trash & deletion
 async function deleteFile(id) {
