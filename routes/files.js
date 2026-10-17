@@ -447,7 +447,7 @@ router.post('/signed-upload', requireAuth, async (req, res) => {
             const totalUsed = (userFiles || []).reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
             if (file_size && (totalUsed + Number(file_size)) > TOTAL_STORAGE_LIMIT_BYTES) {
                 return res.status(400).json({
-                    error: `Upload rejected: Insufficient storage. This file would exceed your 15 GB total storage limit.`
+                    error: `Upload rejected: Insufficient storage. This file would exceed your 1 GB total storage limit.`
                 });
             }
         } catch (_) {}
@@ -970,7 +970,7 @@ router.get('/storage-stats', requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Failed to fetch stats' });
         }
         const usedBytes  = data.reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
-        const totalBytes = TOTAL_STORAGE_LIMIT_BYTES || (15 * 1024 * 1024 * 1024); // 15 GB user quota
+        const totalBytes = TOTAL_STORAGE_LIMIT_BYTES || (1 * 1024 * 1024 * 1024); // 1 GB user quota
         storageStatsCache.set(userId, { used: usedBytes, total: totalBytes, count: data.length, time: now });
         res.json({ used: usedBytes, total: totalBytes, count: data.length });
     } catch (err) {

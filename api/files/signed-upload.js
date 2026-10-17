@@ -42,7 +42,7 @@ module.exports = async function handler(req, res) {
             const totalUsed = (userFiles || []).reduce((sum, f) => sum + (Number(f.file_size) || 0), 0);
             if (file_size && (totalUsed + Number(file_size)) > TOTAL_STORAGE_LIMIT_BYTES) {
                 return res.status(400).json({
-                    error: 'Upload rejected: Insufficient storage. This file would exceed your 15 GB total storage limit.'
+                    error: 'Upload rejected: Insufficient storage. This file would exceed your 1 GB total storage limit.'
                 });
             }
         } catch (_) {}
