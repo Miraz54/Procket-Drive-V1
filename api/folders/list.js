@@ -21,7 +21,7 @@ module.exports = async function handler(req, res) {
     try {
         const { parent_id } = req.query;
         let query = supabase.from('folders')
-            .select('*')
+            .select('id, name, is_shared, parent_id, created_at')
             .eq('user_id', userId)
             .neq('name', '__pd_vault__')
             .order('name', { ascending: true });

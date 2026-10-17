@@ -26,7 +26,7 @@ module.exports = async function handler(req, res) {
 
         if (error || !data) return res.status(404).json({ error: 'User not found' });
 
-        res.json(data);
+        res.json({ authenticated: true, ...data });
     } catch (err) {
         console.error('/me error:', err);
         res.status(500).json({ error: 'Server error' });

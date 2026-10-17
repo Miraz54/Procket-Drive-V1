@@ -52,6 +52,50 @@ let currentFolderId = null;
 let sharedFolderId = null;
 let folderStack = [];
 
+// In-memory cache for instant folder switching & navigation (0ms)
+const _folderCache = new Map();
+
+function invalidateFolderCache(folderId = null) {
+    if (folderId) {
+        _folderCache.delete(String(folderId));
+    } else {
+        _folderCache.clear();
+    }
+}
+
+// Hydrate from localStorage for instant 0ms startup / refresh
+function hydrateFromCache() {
+    try {
+        const cachedUser = JSON.parse(localStorage.getItem('pd_cached_user') || 'null');
+        if (cachedUser && (cachedUser.email || cachedUser.authenticated)) {
+            const emailEl = document.getElementById('userEmail');
+            if (emailEl && cachedUser.email) emailEl.textContent = cachedUser.email;
+            const nameEl = document.getElementById('userName');
+            if (nameEl && cachedUser.name) nameEl.textContent = cachedUser.name;
+            const avatarEl = document.getElementById('profileAvatar');
+            if (avatarEl && cachedUser.profile_picture && cachedUser.profile_picture !== '/uploads/default-avatar.png') {
+                avatarEl.src = cachedUser.profile_picture;
+            }
+
+            if (typeof showDashboard === 'function') showDashboard();
+
+            const cachedFiles = JSON.parse(localStorage.getItem('pd_cached_files') || '[]');
+            const cachedFolders = JSON.parse(localStorage.getItem('pd_cached_folders') || '[]');
+            if (Array.isArray(cachedFiles) && (cachedFiles.length > 0 || cachedFolders.length > 0)) {
+                allFiles = cachedFiles;
+                allFolders = cachedFolders;
+                _folderCache.set('root', { files: [...allFiles], folders: [...allFolders], timestamp: Date.now() });
+                if (activeNav === 'drive' && typeof renderDriveView === 'function') {
+                    renderDriveView();
+                }
+            }
+            if (typeof hideInitSpinner === 'function') hideInitSpinner();
+        }
+    } catch (e) {
+        console.warn('Cache hydration skipped:', e);
+    }
+}
+
 document.body.classList.add('light-mode');
 document.body.classList.remove('dark-mode');
 function toggleTheme() { }
@@ -141,6 +185,17 @@ async function checkAuth() {
         if (user && user.authenticated && user.email) {
             const emailEl = document.getElementById('userEmail');
             if (emailEl) emailEl.textContent = user.email;
+            const nameEl = document.getElementById('userName');
+            if (nameEl && user.name) nameEl.textContent = user.name;
+            const avatarEl = document.getElementById('profileAvatar');
+            if (avatarEl && user.profile_picture && user.profile_picture !== '/uploads/default-avatar.png') {
+                avatarEl.src = user.profile_picture;
+            }
+
+            // Persist user cache for instant hydration
+            try {
+                localStorage.setItem('pd_cached_user', JSON.stringify(user));
+            } catch (e) {}
 
             const redirectUrl = sessionStorage.getItem('pd_post_login_redirect');
             if (redirectUrl) {
@@ -162,7 +217,13 @@ async function checkAuth() {
             }
             startStoragePolling();
         } else {
-            // Unauthenticated: Pre-fill remembered email securely (without storing password)
+            // Unauthenticated: clear stale cache
+            localStorage.removeItem('pd_cached_user');
+            localStorage.removeItem('pd_cached_files');
+            localStorage.removeItem('pd_cached_folders');
+            _folderCache.clear();
+
+            // Pre-fill remembered email securely (without storing password)
             const remember = localStorage.getItem('pd-remember') === 'true';
             const savedEmail = localStorage.getItem('pd-email');
             const emailInput = document.getElementById('loginEmail');
@@ -194,6 +255,11 @@ async function login(e) {
         if (res.ok) {
             const emailEl = document.getElementById('userEmail');
             if (emailEl) emailEl.textContent = email;
+
+            // Cache user in localStorage for instant hydration on future refresh
+            try {
+                localStorage.setItem('pd_cached_user', JSON.stringify({ email, authenticated: true }));
+            } catch(e) {}
 
             const rememberMe = document.getElementById('rememberMe')?.checked;
             if (rememberMe) {
@@ -252,6 +318,11 @@ async function logout() {
     localStorage.removeItem('pd-remember');
     localStorage.removeItem('pd-email');
     localStorage.removeItem('pd-password');
+    localStorage.removeItem('pd_cached_user');
+    localStorage.removeItem('pd_cached_files');
+    localStorage.removeItem('pd_cached_folders');
+    localStorage.removeItem('pd_vault_setup');
+    _folderCache.clear();
     stopStoragePolling();
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     const ap = document.getElementById('authPage');
@@ -259,6 +330,7 @@ async function logout() {
     if (ap) ap.style.display = '';
     if (pp) pp.style.display = 'none';
     allFiles = [];
+    allFolders = [];
     const em = document.getElementById('loginEmail');
     const ep = document.getElementById('loginPassword');
     if (em) em.value = '';
@@ -329,10 +401,14 @@ function switchView(view) {
         if (dropzone) dropzone.style.display = '';
         const container = document.getElementById('fileList');
         if (container) container.className = `file-container ${currentView === 'grid' ? 'grid-view' : 'list-view'}`;
-        // Clear stale content immediately before fetching fresh data
-        allFiles = [];
-        allFolders = [];
-        renderDriveView();
+        // Render cached content immediately if available for 0ms view switch
+        const cacheKey = currentFolderId ? String(currentFolderId) : 'root';
+        const cached = _folderCache.get(cacheKey);
+        if (cached) {
+            allFiles = [...cached.files];
+            allFolders = [...cached.folders];
+            renderDriveView();
+        }
         loadFiles();
         if (window.location.pathname !== '/') {
             window.history.pushState(null, '', '/');
@@ -825,6 +901,22 @@ async function loadFiles() {
             if (Array.isArray(data)) allFolders = data;
         }
 
+        // Cache files and folders in memory
+        const cacheKey = currentFolderId ? String(currentFolderId) : 'root';
+        _folderCache.set(cacheKey, {
+            files: [...allFiles],
+            folders: [...allFolders],
+            timestamp: Date.now()
+        });
+
+        // Persist root folder files & folders for instant 0ms reload on refresh
+        if (!currentFolderId) {
+            try {
+                localStorage.setItem('pd_cached_files', JSON.stringify(allFiles));
+                localStorage.setItem('pd_cached_folders', JSON.stringify(allFolders));
+            } catch(e) {}
+        }
+
         if (activeNav === 'vault') {
             renderVaultView();
         } else {
@@ -896,7 +988,7 @@ function getFileIcon(mimeType, fileId, fileName) {
     const ext = (fileName || '').split('.').pop().toLowerCase();
     if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
         if (!fileId) return `<i class="fas fa-file-image" style="font-size:32px;color:#3b82f6;"></i>`;
-        return `<img src="/api/files/public/preview/${fileId}" onerror="this.onerror=null;this.style.display='none';this.insertAdjacentHTML('afterend','<i class=\\\'fas fa-file-image\\\' style=\\\'font-size:32px;color:#3b82f6;\\\'></i>')" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;">`;
+        return `<img src="/api/files/preview/${fileId}" onerror="this.onerror=null;this.style.display='none';this.insertAdjacentHTML('afterend','<i class=\\\'fas fa-file-image\\\' style=\\\'font-size:32px;color:#3b82f6;\\\'></i>')" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:cover;border-radius:8px;">`;
     }
     if (mimeType.includes('pdf') || ext === 'pdf') {
         return `<i class="fas fa-file-pdf" style="font-size:32px;color:#ef4444;"></i>`;
@@ -944,10 +1036,17 @@ async function openFolder(id) {
     const titleEl = document.getElementById('contentTitle');
     if (titleEl) titleEl.textContent = name;
 
-    // Clear stale content immediately so old files don't show during load
-    allFiles = [];
-    allFolders = [];
-    renderDriveView();
+    // Instant folder rendering from cache if available (0ms)
+    const cached = _folderCache.get(String(id));
+    if (cached) {
+        allFiles = [...cached.files];
+        allFolders = [...cached.folders];
+        renderDriveView();
+    } else {
+        allFiles = [];
+        allFolders = [];
+        renderDriveView();
+    }
 
     loadFiles();
 }
@@ -959,10 +1058,17 @@ function goToRoot() {
     const titleEl = document.getElementById('contentTitle');
     if (titleEl) titleEl.textContent = 'My Drive';
 
-    // Clear stale content immediately
-    allFiles = [];
-    allFolders = [];
-    renderDriveView();
+    // Instant root rendering from cache if available (0ms)
+    const cached = _folderCache.get('root');
+    if (cached) {
+        allFiles = [...cached.files];
+        allFolders = [...cached.folders];
+        renderDriveView();
+    } else {
+        allFiles = [];
+        allFolders = [];
+        renderDriveView();
+    }
 
     loadFiles();
 }
@@ -975,10 +1081,18 @@ function goToStackIndex(i) {
     const titleEl = document.getElementById('contentTitle');
     if (titleEl) titleEl.textContent = name;
 
-    // Clear stale content immediately
-    allFiles = [];
-    allFolders = [];
-    renderDriveView();
+    // Instant stack index rendering from cache if available (0ms)
+    const cacheKey = currentFolderId ? String(currentFolderId) : 'root';
+    const cached = _folderCache.get(cacheKey);
+    if (cached) {
+        allFiles = [...cached.files];
+        allFolders = [...cached.folders];
+        renderDriveView();
+    } else {
+        allFiles = [];
+        allFolders = [];
+        renderDriveView();
+    }
 
     loadFiles();
 }
@@ -1478,6 +1592,7 @@ async function checkVaultStatus() {
         if (res.ok) {
             const data = await res.json();
             _vaultIsSetup = !!data.isSetup;
+            try { localStorage.setItem('pd_vault_setup', _vaultIsSetup ? 'true' : 'false'); } catch(e) {}
             _vaultUnlocked = !!data.isUnlocked;
             if (!_vaultUnlocked) {
                 _vaultToken = '';
@@ -1631,6 +1746,22 @@ async function renderVaultView(searchQuery = '') {
     const container = document.getElementById('fileList');
     if (!container) return;
     container.className = "file-container vault-view";
+
+    // Fast path: if already unlocked in this session, render files immediately (0ms)
+    if (_vaultUnlocked) {
+        renderVaultFilesUI(container, searchQuery);
+        if (!_vaultFiles || _vaultFiles.length === 0) {
+            await loadVaultFiles(searchQuery);
+        }
+        return;
+    }
+
+    // Fast path: if PIN setup is already known, display unlock keypad immediately (0ms)
+    const knownSetup = _vaultIsSetup || localStorage.getItem('pd_vault_setup') === 'true';
+    if (knownSetup) {
+        _vaultIsSetup = true;
+        renderVaultUnlockUI(container);
+    }
 
     await checkVaultStatus();
 
@@ -4180,6 +4311,8 @@ window.addEventListener('popstate', async () => {
 });
 
 (async () => {
+    // 0ms instant hydration from cache on page load / refresh
+    hydrateFromCache();
     if (!await checkPublicShareRoute()) {
         checkAuth();
     }

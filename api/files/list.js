@@ -82,19 +82,22 @@ module.exports = async function handler(req, res) {
         }
 
         const { all } = req.query;
-        const { getVaultFolder } = require('../../lib/vault');
-        const vaultFolder = await getVaultFolder(supabaseAdmin, userId);
 
-        let query = supabase.from('files').select('*')
+        let query = supabase.from('files')
+            .select('id, original_name, file_size, mime_type, uploaded_at, folder_id')
             .or('is_deleted.eq.0,is_deleted.is.null')
             .order('original_name', { ascending: true });
 
         if (all === 'true') {
+            const { getVaultFolder } = require('../../lib/vault');
+            const vaultFolder = await getVaultFolder(supabaseAdmin, userId);
             query = query.eq('user_id', userId);
             if (vaultFolder) {
                 query = query.neq('folder_id', vaultFolder.id);
             }
         } else if (folder_id) {
+            const { getVaultFolder } = require('../../lib/vault');
+            const vaultFolder = await getVaultFolder(supabaseAdmin, userId);
             // Block direct access to vault folder
             if (vaultFolder && String(vaultFolder.id) === String(folder_id)) {
                 return res.status(403).json({ error: 'Vault files must be accessed through the Vault interface' });
@@ -106,7 +109,7 @@ module.exports = async function handler(req, res) {
             }
             query = query.eq('folder_id', folder_id);
         } else {
-            // Root directory lists user's own files only
+            // Root directory lists user's own files only (vault files always have a non-null folder_id)
             query = query.eq('user_id', userId).is('folder_id', null);
         }
 

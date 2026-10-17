@@ -556,19 +556,19 @@ router.get('/list', requireAuth, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const { folder_id, all } = req.query;
 
-    const vaultFolder = await getVaultFolder(supabaseAdmin, req.session.userId);
-
     let query = supabaseAdmin.from('files')
         .select('id, original_name, file_size, mime_type, uploaded_at, folder_id')
         .or('is_deleted.eq.0,is_deleted.is.null')
         .order('original_name', { ascending: true });
 
     if (all === 'true') {
+        const vaultFolder = await getVaultFolder(supabaseAdmin, req.session.userId);
         query = query.eq('user_id', req.session.userId);
         if (vaultFolder) {
             query = query.neq('folder_id', vaultFolder.id);
         }
     } else if (folder_id) {
+        const vaultFolder = await getVaultFolder(supabaseAdmin, req.session.userId);
         // Block direct access to vault folder via regular list API
         if (vaultFolder && String(vaultFolder.id) === String(folder_id)) {
             return res.status(403).json({ error: 'Vault files must be accessed through the Vault interface' });
@@ -580,6 +580,7 @@ router.get('/list', requireAuth, async (req, res) => {
         }
         query = query.eq('folder_id', folder_id);
     } else {
+        // Root directory lists user's own files only (vault files always have a non-null folder_id)
         query = query.eq('user_id', req.session.userId).is('folder_id', null);
     }
 
