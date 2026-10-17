@@ -1192,6 +1192,15 @@ body {
     border: none;
     border-radius: 0;
     padding: 18px 20px 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+    gap: 16px;
+    align-content: start;
+}
+
+.file-container.list-view,
+.file-container.vault-view {
+    display: block;
 }
 
 /* Empty state */
@@ -1204,6 +1213,8 @@ body {
     gap: 10px;
     color: var(--text-3);
     text-align: center;
+    grid-column: 1 / -1;
+    width: 100%;
 }
 
 .empty-state-icon {
@@ -2173,6 +2184,7 @@ body {
         display: none;
     }
 
+    .file-container,
     .file-container.grid-view {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
@@ -3997,6 +4009,9 @@ body {
 
 .vault-container {
     max-width: 680px;
+    width: 100%;
+    box-sizing: border-box;
+    grid-column: 1 / -1;
     margin: 30px auto;
     text-align: center;
     padding: 36px 28px;

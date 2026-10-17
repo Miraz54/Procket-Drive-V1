@@ -41,6 +41,10 @@ function pdToast(type, title, msg, duration) {
 
 // App state
 let currentView = 'grid';
+try {
+    const savedView = localStorage.getItem('pd_current_view');
+    if (savedView === 'grid' || savedView === 'list') currentView = savedView;
+} catch (e) {}
 let activeNav = 'drive';
 let allFiles = [];
 let allFolders = [];
@@ -323,6 +327,8 @@ function switchView(view) {
         const breadcrumbBar = document.getElementById('breadcrumbBar');
         if (breadcrumbBar) breadcrumbBar.style.display = folderStack.length > 0 ? 'flex' : 'none';
         if (dropzone) dropzone.style.display = '';
+        const container = document.getElementById('fileList');
+        if (container) container.className = `file-container ${currentView === 'grid' ? 'grid-view' : 'list-view'}`;
         // Clear stale content immediately before fetching fresh data
         allFiles = [];
         allFolders = [];
@@ -1009,6 +1015,20 @@ function renderDriveView(folders, files) {
     const container = document.getElementById('fileList');
     if (!container) return;
 
+    // Ensure container always has the correct grid-view or list-view class
+    container.className = `file-container ${currentView === 'grid' ? 'grid-view' : 'list-view'}`;
+
+    // Ensure toolbar view buttons reflect currentView state
+    const gridBtn = document.getElementById('gridViewBtn');
+    const listBtn = document.getElementById('listViewBtn');
+    if (currentView === 'grid') {
+        gridBtn?.classList.add('active');
+        listBtn?.classList.remove('active');
+    } else {
+        listBtn?.classList.add('active');
+        gridBtn?.classList.remove('active');
+    }
+
     if (folders.length === 0 && files.length === 0) {
         container.innerHTML = `
         <div class="empty-state">
@@ -1610,7 +1630,7 @@ async function loadVaultFiles(searchQuery = '') {
 async function renderVaultView(searchQuery = '') {
     const container = document.getElementById('fileList');
     if (!container) return;
-    container.className = "file-container";
+    container.className = "file-container vault-view";
 
     await checkVaultStatus();
 
@@ -1856,7 +1876,7 @@ function renderVaultFilesUI(container, searchQuery = '') {
         vaultFiles = vaultFiles.filter(f => (f.name || '').toLowerCase().includes(q));
     }
 
-    container.className = "file-container";
+    container.className = "file-container vault-view";
 
     const m = Math.floor(_vaultCountdownSeconds / 60);
     const s = _vaultCountdownSeconds % 60;
@@ -2279,7 +2299,10 @@ async function showSharedWithMeView() {
     if (dropzone) dropzone.style.display = 'none';
 
     const container = document.getElementById('fileList');
-    if (container) container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-2);grid-column:1/-1;"><i class="fas fa-spinner fa-spin fa-2x"></i><p style="margin-top:12px;">Loading items shared with you...</p></div>';
+    if (container) {
+        container.className = "file-container grid-view";
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-2);grid-column:1/-1;"><i class="fas fa-spinner fa-spin fa-2x"></i><p style="margin-top:12px;">Loading items shared with you...</p></div>';
+    }
 
     try {
         const res = await fetch('/api/folders/shared-with-me', { credentials: 'include' });
@@ -2321,6 +2344,7 @@ async function showSharedWithMeView() {
         sharedFolders.sort((a, b) => (a.name || a.folder_name || '').localeCompare(b.name || b.folder_name || '', undefined, { numeric: true, sensitivity: 'base' }));
 
         if (container) {
+            container.className = "file-container grid-view";
             container.innerHTML = sharedFolders.map(sf => {
                 const ownerInitial = (sf.owner_name || 'F').charAt(0).toUpperCase();
                 const ownerDisplay = sf.owner_name || 'Shared Folder';
@@ -2381,15 +2405,24 @@ function displayFiles(files) { renderDriveView(allFolders, files); }
 // ============================================================
 function setView(view) {
     currentView = view;
+    try { localStorage.setItem('pd_current_view', view); } catch (e) {}
     const container = document.getElementById('fileList');
     const gridBtn = document.getElementById('gridViewBtn');
     const listBtn = document.getElementById('listViewBtn');
     if (view === 'grid') {
-        container?.classList.replace('list-view', 'grid-view') || container?.classList.add('grid-view');
-        gridBtn?.classList.add('active'); listBtn?.classList.remove('active');
+        if (container) {
+            container.classList.remove('list-view');
+            container.classList.add('grid-view');
+        }
+        gridBtn?.classList.add('active');
+        listBtn?.classList.remove('active');
     } else {
-        container?.classList.replace('grid-view', 'list-view') || container?.classList.add('list-view');
-        listBtn?.classList.add('active'); gridBtn?.classList.remove('active');
+        if (container) {
+            container.classList.remove('grid-view');
+            container.classList.add('list-view');
+        }
+        listBtn?.classList.add('active');
+        gridBtn?.classList.remove('active');
     }
     if (activeNav === 'vault') {
         renderVaultView();
